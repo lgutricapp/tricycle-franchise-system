@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load static crispy_forms_tags %}
+{% block title %}Track Your Application{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <h1 class="mb-4">Manage Existing Application</h1>
+        <p class="text-muted">Enter the reference code you received when you submitted your application or renewal.</p>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" id="track-form" novalidate>
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label" for="reference_code_input">Reference Code</label>
+                <input type="text" name="reference_code" id="reference_code_input" class="form-control form-control-lg text-uppercase" required autofocus>
+                <div class="invalid-feedback">Please enter your reference code.</div>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Check Status</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/simple-form-validate.js' %}"></script>
+<script>initSimpleFormValidation("#track-form");</script>
+{% endblock %}

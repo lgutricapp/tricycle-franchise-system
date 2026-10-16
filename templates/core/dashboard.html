@@ -1,0 +1,52 @@
+{% extends "staff_base.html" %}
+{% load status_tags %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="stat-card">
+        <div class="stat-value">{{ stats.active_franchises }}</div><div class="stat-label">Active Franchises</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card stat-danger">
+        <div class="stat-value">{{ stats.expired_franchises }}</div><div class="stat-label">Expired</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card stat-warning">
+        <div class="stat-value">{{ stats.expiring_soon }}</div><div class="stat-label">Expiring in 30 Days</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card stat-danger">
+        <div class="stat-value">{{ stats.unsettled_violations }}</div><div class="stat-label">Unsettled Violations</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+        <div class="stat-value">{{ stats.new_pending }}</div><div class="stat-label">New Applications Pending</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+        <div class="stat-value">{{ stats.renewal_pending }}</div><div class="stat-label">Renewals Pending</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card stat-warning">
+        <div class="stat-value">{{ stats.revision_required }}</div><div class="stat-label">Needs Revision</div>
+    </div></div>
+</div>
+
+<div class="card">
+    <div class="card-header">Recent Activity Queue</div>
+    <div class="card-body">
+        <table class="table">
+            <thead><tr><th>Reference</th><th>Applicant</th><th>Type</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for app in recent_queue %}
+                <tr>
+                    <td>{{ app.reference_code }}</td>
+                    <td>{{ app.applicant.full_name }}</td>
+                    <td>{{ app.get_type_display }}</td>
+                    <td><span class="status-badge status-badge--{{ app.status|status_tone }}">{{ app.get_status_display }}</span></td>
+                    <td><a href="{% url 'staff_applications:detail' app.reference_code %}" class="btn btn-sm btn-outline-primary">Review</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5"><div class="empty-state"><h4>Queue is Clear</h4><p class="mb-0">There are currently no applications waiting for review.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

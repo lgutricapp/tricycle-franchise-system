@@ -1,0 +1,57 @@
+
+{% extends "base.html" %}
+
+{% block title %}Home — Tricycle Franchise System{% endblock %}
+
+{% block hero %}
+<div class="landing-page">
+
+    <section class="landing-hero">
+        <div class="container">
+            <h1>Tricycle Franchise Online Services</h1>
+            <p class="lead">
+                Apply for a new franchise, renew an existing one, or track your application — all online, without visiting the office.
+            </p>
+        </div>
+    </section>
+
+    <section class="landing-services">
+        <div class="container">
+            <div class="row g-4 justify-content-center">
+
+                <div class="col-md-4">
+                    <div class="service-card">
+                        <div class="service-icon"><i class="bi bi-file-earmark-text"></i></div>
+                        <h3>New Franchise Application</h3>
+                        <p>Submit a new application for a tricycle franchise, including vehicle and document requirements.</p>
+                        <a href="{% url 'applications:new' %}" class="btn btn-primary">Apply Now</a>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="service-card">
+                        <div class="service-icon"><i class="bi bi-arrow-repeat"></i></div>
+                        <h3>Franchise Renewal</h3>
+                        <p>Renew an existing tricycle franchise using your franchise number and holder name.</p>
+                        <a href="{% url 'applications:renewal_lookup' %}" class="btn btn-primary">Renew Franchise</a>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="service-card">
+                        <div class="service-icon"><i class="bi bi-search"></i></div>
+                        <h3>Manage Existing Application</h3>
+                        <p>Check the status of your application or renewal, and respond to document revisions, using your reference code.</p>
+                        <a href="{% url 'applications:track' %}" class="btn btn-primary">Track Application</a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block content %}
+{% endblock %}

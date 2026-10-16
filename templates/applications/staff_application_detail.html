@@ -1,0 +1,288 @@
+{% extends "staff_base.html" %}
+{% load status_tags %}
+{% block title %}Review {{ application.reference_code }}{% endblock %}
+{% block page_title %}{{ application.reference_code }}{% endblock %}
+
+{% block content %}
+<div class="card mb-4" style="border-left: 4px solid var(--color-primary);">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <div class="text-muted small">Application Status</div>
+                <span class="status-badge status-badge--{{ application.status|status_tone }} fs-6">{{ application.get_status_display }}</span>
+                {% if application.status == "RESUBMITTED" %}
+                    <span class="status-badge status-badge--success fs-6 ms-1"><i class="bi bi-arrow-repeat"></i> Documents Updated</span>
+                {% endif %}
+                <span class="text-muted ms-2">{{ application.get_type_display }}</span>
+            </div>
+
+            {% if allowed_next_statuses %}
+                <div class="d-flex gap-2 flex-wrap">
+                    {% if "REVISION_REQUIRED" in allowed_next_statuses %}
+                        <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#decisionModal"
+                                data-status="REVISION_REQUIRED" data-label="Revision Required" data-style="warning">
+                            <i class="bi bi-exclamation-triangle"></i> Revision Required
+                        </button>
+                    {% endif %}
+
+                    {% if "APPROVED" in allowed_next_statuses %}
+                        {% if revision_required_document_names %}
+                            <span tabindex="0" data-bs-toggle="tooltip" title="A document is tagged as Requires Revision. Resolve it before you can approve.">
+                                <button type="button" class="btn btn-accent" disabled style="pointer-events: none;">
+                                    <i class="bi bi-check-circle"></i> Approve
+                                </button>
+                            </span>
+                        {% else %}
+                            <button type="button" class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#decisionModal"
+                                    data-status="APPROVED" data-label="Approve" data-style="accent">
+                                <i class="bi bi-check-circle"></i> Approve
+                            </button>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if "REJECTED" in allowed_next_statuses %}
+                        {% if revision_required_document_names %}
+                            <span tabindex="0" data-bs-toggle="tooltip" title="A document is tagged as Requires Revision. Resolve it before you can reject.">
+                                <button type="button" class="btn btn-outline-danger" disabled style="pointer-events: none;">
+                                    <i class="bi bi-x-circle"></i> Reject
+                                </button>
+                            </span>
+                        {% else %}
+                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#decisionModal"
+                                    data-status="REJECTED" data-label="Reject" data-style="danger">
+                                <i class="bi bi-x-circle"></i> Reject
+                            </button>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if "CANCELLED" in allowed_next_statuses %}
+                        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#decisionModal"
+                                data-status="CANCELLED" data-label="Cancel Application" data-style="secondary">
+                            Cancel Application
+                        </button>
+                    {% endif %}
+                </div>
+            {% else %}
+                <span class="text-muted small">No further actions available.</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Decision confirmation modal -->
+<div class="modal fade" id="decisionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="decisionForm" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="transition_status">
+                <input type="hidden" name="new_status" id="decisionModalStatus">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="decisionModalTitle">Confirm Decision</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="decisionModalPrompt">Are you sure this decision is final?</p>
+                    <label class="form-label" for="decisionModalRemarks">Remarks <span id="decisionRemarksNote" class="text-muted">(optional)</span></label>
+                    <textarea name="remarks" id="decisionModalRemarks" class="form-control" rows="3"></textarea>
+                    <div class="invalid-feedback">Remarks are required when rejecting an application.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="decisionModalConfirmBtn">Confirm</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Documents-not-reviewed warning modal -->
+<div class="modal fade" id="pendingDocsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill" style="color: var(--color-warning);"></i> Documents Not Yet Reviewed</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>All documents must be reviewed before the application status can be updated. The following document(s) are still <strong>Pending Review</strong>:</p>
+                <ul id="pendingDocsList"></ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Okay</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ pending_document_names|json_script:"pending-docs-data" }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const decisionModalEl = document.getElementById("decisionModal");
+    const decisionForm = document.getElementById("decisionForm");
+    const remarksField = document.getElementById("decisionModalRemarks");
+    const remarksNote = document.getElementById("decisionRemarksNote");
+
+    let pendingDocs = [];
+    try {
+        pendingDocs = JSON.parse(document.getElementById("pending-docs-data").textContent) || [];
+    } catch (e) {
+        pendingDocs = [];
+    }
+
+    let currentStatus = null;
+
+    const actionPhrases = {
+        APPROVED: "approve this application",
+        REJECTED: "reject this application",
+        REVISION_REQUIRED: "request revisions for this application",
+        CANCELLED: "cancel this application",
+    };
+
+    decisionModalEl.addEventListener("show.bs.modal", function (event) {
+        const button = event.relatedTarget;
+        if (!button) return;
+
+        const status = button.getAttribute("data-status");
+        const label = button.getAttribute("data-label");
+        const style = button.getAttribute("data-style");
+
+        // Block the decision until every document has been reviewed.
+        if (status !== "CANCELLED" && pendingDocs.length > 0) {
+            event.preventDefault();
+            const list = document.getElementById("pendingDocsList");
+            list.innerHTML = "";
+            pendingDocs.forEach(function (name) {
+                const li = document.createElement("li");
+                li.textContent = name;
+                list.appendChild(li);
+            });
+            bootstrap.Modal.getOrCreateInstance(document.getElementById("pendingDocsModal")).show();
+            return;
+        }
+
+        currentStatus = status;
+        document.getElementById("decisionModalStatus").value = status;
+        document.getElementById("decisionModalTitle").textContent = "Confirm: " + label;
+        document.getElementById("decisionModalPrompt").textContent =
+            "Are you sure you want to " + (actionPhrases[status] || "make this decision") + "? This decision is final.";
+
+        remarksField.value = "";
+        remarksField.classList.remove("is-invalid");
+        remarksNote.textContent = status === "REJECTED" ? "(required)" : "(optional)";
+
+        const confirmBtn = document.getElementById("decisionModalConfirmBtn");
+        confirmBtn.className = "btn btn-" + (style === "accent" ? "accent" : style === "warning" ? "warning" : style === "danger" ? "danger" : "secondary");
+        confirmBtn.textContent = "Confirm " + label;
+    });
+
+    remarksField.addEventListener("input", function () {
+        remarksField.classList.remove("is-invalid");
+    });
+
+    decisionForm.addEventListener("submit", function (event) {
+        if (currentStatus === "REJECTED" && !remarksField.value.trim()) {
+            event.preventDefault();
+            remarksField.classList.add("is-invalid");
+            remarksField.focus();
+        }
+    });
+});
+</script>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">Applicant</div>
+            <div class="card-body">
+                <p><strong>{{ application.applicant.full_name }}</strong></p>
+                <p class="mb-1">{{ application.applicant.address }}</p>
+                <p class="mb-1">{{ application.applicant.contact_number }}</p>
+                <p class="mb-0">{{ application.applicant.email|default:"—" }}</p>
+            </div>
+        </div>
+        {% if application.vehicle %}
+        <div class="card mb-4">
+            <div class="card-header">Vehicle</div>
+            <div class="card-body">
+                <p class="mb-1">Plate: {{ application.vehicle.plate_number }}</p>
+                <p class="mb-1">Engine: {{ application.vehicle.engine_number }}</p>
+                <p class="mb-1">Chassis: {{ application.vehicle.chassis_number }}</p>
+                <p class="mb-0">{{ application.vehicle.make }} {{ application.vehicle.model }}, {{ application.vehicle.color }}</p>
+            </div>
+        </div>
+        {% endif %}
+        {% if application.franchise %}
+        <div class="card mb-4">
+            <div class="card-header">Linked Franchise</div>
+            <div class="card-body">
+                <p class="mb-0"><a href="{% url 'franchises:detail' application.franchise.franchise_number %}">{{ application.franchise.franchise_number }}</a></p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">Documents</div>
+            <div class="card-body">
+                {% if documents %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="review_documents">
+
+                    {% for doc in documents %}
+                    <div class="border rounded p-3 mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <strong>{{ doc.document_requirement.name }}</strong>
+                                <span class="status-badge status-badge--{{ doc.status|status_tone }} ms-2">{{ doc.get_status_display }}</span>
+                            </div>
+                            <a href="{{ doc.uploaded_file.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">View File</a>
+                        </div>
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-5">
+                                <select name="doc_status_{{ doc.id }}" class="form-select form-select-sm">
+                                    {% for value, label in document_status_choices %}
+                                        <option value="{{ value }}" {% if value == doc.status %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-7">
+                                <input type="text" name="doc_remarks_{{ doc.id }}" class="form-control form-control-sm" placeholder="Remarks (for revision/rejection)" value="{{ doc.admin_remarks }}">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <div class="d-flex justify-content-end mt-3">
+                        <button type="submit" class="btn btn-primary">Update Documents</button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="empty-state"><h4>No Documents</h4><p class="mb-0">No documents were submitted with this application.</p></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Status Timeline</div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for entry in history %}
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="status-badge status-badge--{{ entry.status|status_tone }}">{{ entry.get_status_display }}</span>
+                            {% if entry.remarks %}<div class="small text-muted mt-1">{{ entry.remarks }}</div>{% endif %}
+                        </div>
+                        <span class="text-muted small">{{ entry.changed_at|date:"M d, Y g:i A" }}{% if entry.changed_by %} &middot; {{ entry.changed_by.username }}{% endif %}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted">No status history yet.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

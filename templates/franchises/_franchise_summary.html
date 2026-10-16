@@ -1,0 +1,32 @@
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <h6>Franchise Holder</h6>
+        <p class="mb-1"><strong>{{ franchise.holder.full_name }}</strong></p>
+        <p class="mb-1">{{ franchise.holder.address }}</p>
+        <p class="mb-1">{{ franchise.holder.contact_number }}</p>
+        <p class="mb-0">{{ franchise.holder.email|default:"—" }}</p>
+    </div>
+    <div class="col-md-6">
+        <h6>Vehicle Information</h6>
+        <p class="mb-1">Plate: {{ franchise.vehicle.plate_number }}</p>
+        <p class="mb-1">Engine: {{ franchise.vehicle.engine_number }}</p>
+        <p class="mb-1">Chassis: {{ franchise.vehicle.chassis_number }}</p>
+        <p class="mb-0">{{ franchise.vehicle.make }} {{ franchise.vehicle.model }}, {{ franchise.vehicle.color }}</p>
+    </div>
+</div>
+
+<h6>Status Timeline</h6>
+<ul class="list-group list-group-flush">
+    {% for e in timeline %}
+    <li class="list-group-item px-0 d-flex justify-content-between align-items-start">
+        <div>
+            <strong>{{ e.label }}</strong>
+            {% if e.by %}<span class="text-muted small"> &middot; {{ e.by.get_full_name|default:e.by.username }}</span>{% endif %}
+            {% if e.remarks %}<div class="small text-muted mt-1">{{ e.remarks }}</div>{% endif %}
+        </div>
+        <span class="text-muted small text-nowrap ms-3">
+            {% if e.show_time %}{{ e.when|date:"M d, Y g:i A" }}{% else %}{{ e.when|date:"M d, Y" }}{% endif %}
+        </span>
+    </li>
+    {% endfor %}
+</ul>

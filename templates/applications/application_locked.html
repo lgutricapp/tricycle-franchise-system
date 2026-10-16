@@ -1,0 +1,15 @@
+{% extends "staff_base.html" %}
+{% block title %}Locked{% endblock %}
+{% block page_title %}Application Locked{% endblock %}
+
+{% block content %}
+<div class="empty-state">
+    <i class="bi bi-lock" style="font-size: 2rem; color: var(--color-warning);"></i>
+    <h4>Locked — Previous Application Must Be Completed First</h4>
+    <p>Application <strong>{{ application.reference_code }}</strong> cannot be opened yet.</p>
+    {% if front %}
+        <p>Please process <strong>{{ front.reference_code }}</strong> ({{ front.applicant.full_name }}) first.</p>
+        <a href="{% url 'staff_applications:detail' front.reference_code %}" class="btn btn-primary">Go to {{ front.reference_code }}</a>
+    {% endif %}
+</div>
+{% endblock %}

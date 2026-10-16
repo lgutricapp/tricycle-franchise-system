@@ -1,0 +1,108 @@
+{% extends "staff_base.html" %}
+{% load static crispy_forms_tags %}
+{% block title %}Add Franchise Holder Manually{% endblock %}
+{% block page_title %}Add Franchise Holder Manually{% endblock %}
+
+{% block content %}
+<p class="text-muted">Use this to add an existing franchise holder who isn't in the system yet. Every field and every required document must be provided, except Middle Name and Email. This entry will be recorded under your name.</p>
+
+<form method="post" enctype="multipart/form-data" id="manual-franchise-form" novalidate>
+    {% csrf_token %}
+
+    <div class="card mb-4">
+        <div class="card-header">Franchise Information</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">{{ franchise_form.franchise_number|as_crispy_field }}</div>
+                <div class="col-md-4">{{ franchise_form.date_issued|as_crispy_field }}</div>
+                <div class="col-md-4">{{ franchise_form.expiration_date|as_crispy_field }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Franchise Holder</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">{{ holder_form.first_name|as_crispy_field }}</div>
+                <div class="col-md-4">{{ holder_form.middle_name|as_crispy_field }}</div>
+                <div class="col-md-4">{{ holder_form.last_name|as_crispy_field }}</div>
+            </div>
+            {{ holder_form.address|as_crispy_field }}
+            <div class="row">
+                <div class="col-md-6">{{ holder_form.contact_number|as_crispy_field }}</div>
+                <div class="col-md-6">{{ holder_form.email|as_crispy_field }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Tricycle Information</div>
+        <div class="card-body">
+            {{ vehicle_form|crispy }}
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Required Documents</div>
+        <div class="card-body">
+            {% if file_errors %}
+                <div class="alert alert-danger">
+                    <strong>Some files couldn't be accepted:</strong>
+                    <ul class="mb-0">
+                        {% for err in file_errors %}<li>{{ err }}</li>{% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+            {% if missing_required_docs %}
+                <div class="alert alert-danger">
+                    Please upload the following required documents: {{ missing_required_docs|join:", " }}
+                </div>
+            {% endif %}
+            {% for req in requirements %}
+                <div class="document-row">
+                    <div class="document-name">
+                        <i class="bi bi-file-earmark"></i> {{ req.name }}
+                        {% if req.required %}<span class="required-flag">*</span>{% endif %}
+                    </div>
+                    {% if req.description %}<div class="document-desc">{{ req.description }}</div>{% endif %}
+                    <input type="file" name="document_{{ req.id }}" class="form-control" accept=".pdf,.jpg,.jpeg,.png" {% if req.required %}data-required="true"{% endif %}>
+                    <div class="invalid-feedback">Please select a file for this required document.</div>
+                    <div class="file-chosen-name"></div>
+                </div>
+            {% empty %}
+                <p class="text-muted mb-0">No document requirements have been configured yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg mb-4">Add Franchise Holder</button>
+</form>
+
+<div class="card">
+    <div class="card-header">Recently Added Manually</div>
+    <div class="card-body">
+        <table class="table">
+            <thead><tr><th>Franchise #</th><th>Holder</th><th>Added By</th><th>Date Added</th></tr></thead>
+            <tbody>
+                {% for f in recent_manual %}
+                <tr>
+                    <td><a href="{% url 'franchises:detail' f.franchise_number %}">{{ f.franchise_number }}</a></td>
+                    <td>{{ f.holder.full_name }}</td>
+                    <td>{% if f.registered_by %}{{ f.registered_by.get_full_name|default:f.registered_by.username }}{% else %}—{% endif %}</td>
+                    <td>{{ f.registered_at|date:"M d, Y g:i A"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><h4>No Manual Entries Yet</h4><p class="mb-0">Franchise holders you add manually will be listed here.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="form-text">The full history of every manual entry is also in the Audit Log.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/simple-form-validate.js' %}"></script>
+<script>initSimpleFormValidation("#manual-franchise-form");</script>
+{% endblock %}

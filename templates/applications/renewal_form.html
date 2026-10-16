@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Renew Franchise {{ franchise.franchise_number }}{% endblock %}
+
+{% block content %}
+<h1 class="mb-1">Renew Franchise {{ franchise.franchise_number }}</h1>
+<p class="text-muted mb-4">Expires: {{ franchise.expiration_date }}</p>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Franchise Holder</div>
+            <div class="card-body">
+                <p class="mb-1"><strong>{{ franchise.holder.full_name }}</strong></p>
+                <p class="mb-1">{{ franchise.holder.address }}</p>
+                <p class="mb-1">{{ franchise.holder.contact_number }}</p>
+                <p class="mb-0">{{ franchise.holder.email|default:"—" }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Tricycle Information</div>
+            <div class="card-body">
+                <p class="mb-1">Plate: {{ franchise.vehicle.plate_number }}</p>
+                <p class="mb-1">Engine: {{ franchise.vehicle.engine_number }}</p>
+                <p class="mb-1">Chassis: {{ franchise.vehicle.chassis_number }}</p>
+                <p class="mb-0">{{ franchise.vehicle.make }} {{ franchise.vehicle.model }}, {{ franchise.vehicle.color }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+<p class="text-muted mb-4">
+    <i class="bi bi-info-circle"></i>
+    If any of the information above needs to be corrected, please visit the LGU office — it cannot be edited through online renewal.
+</p>
+
+<form method="post" enctype="multipart/form-data" id="renewal-form" novalidate>
+    {% csrf_token %}
+    <div class="card mb-4">
+        <div class="card-header">Required Documents</div>
+        <div class="card-body">
+            {% if file_errors %}
+                <div class="alert alert-danger">
+                    <strong>Some files couldn't be accepted:</strong>
+                    <ul class="mb-0">
+                        {% for err in file_errors %}<li>{{ err }}</li>{% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+            {% if missing_required_docs %}
+                <div class="alert alert-danger">
+                    Please upload the following required documents: {{ missing_required_docs|join:", " }}
+                </div>
+            {% endif %}
+            {% for req in requirements %}
+                <div class="document-row">
+                    <div class="document-name">
+                        <i class="bi bi-file-earmark"></i> {{ req.name }}
+                        {% if req.required %}<span class="required-flag">*</span>{% endif %}
+                    </div>
+                    {% if req.description %}<div class="document-desc">{{ req.description }}</div>{% endif %}
+                    <input type="file" name="document_{{ req.id }}" class="form-control" accept=".pdf,.jpg,.jpeg,.png" {% if req.required %}data-required="true"{% endif %}>
+                    <div class="invalid-feedback">Please select a file for this required document.</div>
+                    <div class="file-chosen-name"></div>
+                </div>
+            {% empty %}
+                <p class="text-muted">No renewal document requirements have been configured yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg">Submit Renewal</button>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/simple-form-validate.js' %}"></script>
+<script>initSimpleFormValidation("#renewal-form");</script>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "staff_base.html" %}
+{% load status_tags %}
+{% block title %}{{ page_title|default:"Application Queue" }}{% endblock %}
+{% block page_title %}{{ page_title|default:"Application Queue" }}{% endblock %}
+
+{% block content %}
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-{% if hide_type_filter %}4{% else %}3{% endif %}">
+        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search reference code or name">
+    </div>
+    <div class="col-md-{% if hide_type_filter %}4{% else %}3{% endif %}">
+        <select name="status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if value == status_filter %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% if not hide_type_filter %}
+    <div class="col-md-3">
+        <select name="type" class="form-select">
+            <option value="">All Types</option>
+            {% for value, label in type_choices %}
+                <option value="{{ value }}" {% if value == type_filter %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div class="col-md-{% if hide_type_filter %}4{% else %}3{% endif %}">
+        <button type="submit" class="btn btn-primary w-100">Filter</button>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-body">
+        <table class="table">
+            <thead><tr><th>Reference</th><th>Applicant</th><th>Type</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
+            <tbody>
+                {% for app in applications %}
+                <tr>
+                    <td>{{ app.reference_code }}</td>
+                    <td>{{ app.applicant.full_name }}</td>
+                    <td>{{ app.get_type_display }}</td>
+                    <td><span class="status-badge status-badge--{{ app.status|status_tone }}">{{ app.get_status_display }}</span></td>
+                    <td>{{ app.submitted_at|date:"M d, Y"|default:"—" }}</td>
+                    <td><a href="{% url 'staff_applications:detail' app.reference_code %}" class="btn btn-sm btn-outline-primary">Open</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6"><div class="empty-state"><h4>No Applications Found</h4><p class="mb-0">No applications match this filter.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

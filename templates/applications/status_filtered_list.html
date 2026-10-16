@@ -1,0 +1,218 @@
+{% extends "staff_base.html" %}
+{% load status_tags %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <table class="table">
+            <thead><tr><th>Reference</th><th>Applicant</th><th>Type</th><th>Status</th><th>Franchise</th><th>Updated</th><th></th></tr></thead>
+            <tbody>
+                {% for app in applications %}
+                <tr>
+                    <td>{{ app.reference_code }}</td>
+                    <td>{{ app.applicant.full_name }}</td>
+                    <td>{{ app.get_type_display }}</td>
+                    <td><span class="status-badge status-badge--{{ app.status|status_tone }}">{{ app.get_status_display }}</span></td>
+                    <td>{% if app.franchise %}<a href="{% url 'franchises:detail' app.franchise.franchise_number %}">{{ app.franchise.franchise_number }}</a>{% else %}—{% endif %}</td>
+                    <td>{{ app.updated_at|date:"M d, Y" }}</td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-primary js-view-summary"
+                                data-url="{% url 'staff_applications:summary' app.reference_code %}"
+                                data-ref="{{ app.reference_code }}">View</button>
+                        {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
+                            {% if app.type == "NEW" and app.status == "APPROVED" %}
+                            <button type="button" class="btn btn-sm btn-accent js-enter-franchise"
+                                    data-url="{% url 'staff_applications:confirm_franchise_number' app.reference_code %}"
+                                    data-ref="{{ app.reference_code }}"
+                                    data-name="{{ app.applicant.full_name }}">Enter Franchise Number</button>
+                            {% endif %}
+                            {% if show_message_button %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary js-send-message"
+                                    data-url="{% url 'notifications:send_to_applicant' app.reference_code %}"
+                                    data-name="{{ app.applicant.full_name }}">Send A Message</button>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7"><div class="empty-state"><h4>Nothing Here Yet</h4></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- View pop-up -->
+<div class="modal fade" id="summaryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="summaryModalTitle">Application</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="summaryModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enter Franchise Number pop-up -->
+<div class="modal fade" id="franchiseModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="franchiseForm" novalidate>
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Enter Franchise Number</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="franchiseModalIntro"></p>
+                    <label class="form-label" for="franchiseNumberInput">Franchise Number</label>
+                    <input type="text" name="franchise_number" id="franchiseNumberInput" class="form-control" placeholder="e.g. TRI-2026-00001" autocomplete="off">
+                    <div class="invalid-feedback" id="franchiseNumberError">Franchise number is required.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-accent">Confirm Franchise Number</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if show_message_button %}
+<!-- Send A Message pop-up -->
+<div class="modal fade" id="messageModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" id="messageForm" novalidate>
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="messageModalTitle">Send A Message</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Sent by SMS, and by email if the applicant provided one. You can edit the message before sending.</p>
+                    <textarea name="message" id="messageText" class="form-control" rows="10" maxlength="1000"></textarea>
+                    <div class="invalid-feedback">Please enter a message.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Send Message</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if franchise_retry %}{{ franchise_retry|json_script:"franchise-retry-data" }}{% endif %}
+{% if approved_message_template %}{{ approved_message_template|json_script:"approved-message-template" }}{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // ---- View pop-up ----
+    const summaryModal = new bootstrap.Modal(document.getElementById("summaryModal"));
+    const summaryBody = document.getElementById("summaryModalBody");
+    const summaryTitle = document.getElementById("summaryModalTitle");
+
+    document.querySelectorAll(".js-view-summary").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            summaryTitle.textContent = "Application " + btn.dataset.ref;
+            summaryBody.innerHTML = '<p class="text-muted mb-0">Loading…</p>';
+            summaryModal.show();
+            fetch(btn.dataset.url)
+                .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+                .then(function (html) { summaryBody.innerHTML = html; })
+                .catch(function () {
+                    summaryBody.innerHTML = '<p class="text-danger mb-0">Unable to load the application details. Please try again.</p>';
+                });
+        });
+    });
+
+    // ---- Franchise number pop-up ----
+    const franchiseModalEl = document.getElementById("franchiseModal");
+    const franchiseModal = new bootstrap.Modal(franchiseModalEl);
+    const franchiseForm = document.getElementById("franchiseForm");
+    const franchiseInput = document.getElementById("franchiseNumberInput");
+    const franchiseError = document.getElementById("franchiseNumberError");
+    const franchiseIntro = document.getElementById("franchiseModalIntro");
+
+    function openFranchiseModal(btn, number, error) {
+        franchiseForm.action = btn.dataset.url;
+        franchiseIntro.textContent =
+            "Enter the official Franchise Number to complete the registration for " +
+            btn.dataset.ref + " (" + btn.dataset.name + "). It will be added to the Franchise Registry once you confirm.";
+        franchiseInput.value = number || "";
+        if (error) {
+            franchiseError.textContent = error;
+            franchiseInput.classList.add("is-invalid");
+        } else {
+            franchiseInput.classList.remove("is-invalid");
+        }
+        franchiseModal.show();
+    }
+
+    document.querySelectorAll(".js-enter-franchise").forEach(function (btn) {
+        btn.addEventListener("click", function () { openFranchiseModal(btn, "", null); });
+    });
+
+    franchiseModalEl.addEventListener("shown.bs.modal", function () { franchiseInput.focus(); });
+    franchiseInput.addEventListener("input", function () { franchiseInput.classList.remove("is-invalid"); });
+
+    franchiseForm.addEventListener("submit", function (event) {
+        if (!franchiseInput.value.trim()) {
+            event.preventDefault();
+            franchiseError.textContent = "Franchise number is required.";
+            franchiseInput.classList.add("is-invalid");
+            franchiseInput.focus();
+        }
+    });
+
+    const retryEl = document.getElementById("franchise-retry-data");
+    if (retryEl) {
+        const retry = JSON.parse(retryEl.textContent);
+        const btn = document.querySelector('.js-enter-franchise[data-ref="' + retry.reference_code + '"]');
+        if (btn) openFranchiseModal(btn, retry.number, retry.error);
+    }
+
+    // ---- Send A Message pop-up ----
+    const messageModalEl = document.getElementById("messageModal");
+    const templateEl = document.getElementById("approved-message-template");
+    if (messageModalEl && templateEl) {
+        const messageModal = new bootstrap.Modal(messageModalEl);
+        const messageForm = document.getElementById("messageForm");
+        const messageText = document.getElementById("messageText");
+        const messageTitle = document.getElementById("messageModalTitle");
+        const messageTemplate = JSON.parse(templateEl.textContent);
+
+        document.querySelectorAll(".js-send-message").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                messageForm.action = btn.dataset.url;
+                messageTitle.textContent = "Send A Message — " + btn.dataset.name;
+                messageText.value = messageTemplate.replace("{name}", btn.dataset.name);
+                messageText.classList.remove("is-invalid");
+                messageModal.show();
+            });
+        });
+
+        messageText.addEventListener("input", function () { messageText.classList.remove("is-invalid"); });
+
+        messageForm.addEventListener("submit", function (event) {
+            if (!messageText.value.trim()) {
+                event.preventDefault();
+                messageText.classList.add("is-invalid");
+                messageText.focus();
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

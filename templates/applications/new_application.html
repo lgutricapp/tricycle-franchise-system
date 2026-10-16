@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load static crispy_forms_tags %}
+{% block title %}New Franchise Application{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">New Tricycle Franchise Application</h1>
+
+<form method="post" enctype="multipart/form-data" id="new-application-form" novalidate>
+    {% csrf_token %}
+
+    <ul class="step-indicator">
+        <li class="is-active"><div class="step-circle">1</div>Applicant Info</li>
+        <li><div class="step-circle">2</div>Tricycle Info</li>
+        <li><div class="step-circle">3</div>Documents</li>
+    </ul>
+
+    <div class="form-step-panel is-active">
+        <div class="card mb-4">
+            <div class="card-header">Applicant Information</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">{{ applicant_form.first_name|as_crispy_field }}</div>
+                    <div class="col-md-4">{{ applicant_form.middle_name|as_crispy_field }}</div>
+                    <div class="col-md-4">{{ applicant_form.last_name|as_crispy_field }}</div>
+                </div>
+                {{ applicant_form.address|as_crispy_field }}
+                <div class="row">
+                    <div class="col-md-6">{{ applicant_form.contact_number|as_crispy_field }}</div>
+                    <div class="col-md-6">{{ applicant_form.email|as_crispy_field }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="step-nav">
+            <span></span>
+            <button type="button" class="btn btn-primary btn-step-next">Next: Tricycle Info</button>
+        </div>
+    </div>
+
+    <div class="form-step-panel">
+        <div class="card mb-4">
+            <div class="card-header">Tricycle Information</div>
+            <div class="card-body">
+                {{ vehicle_form|crispy }}
+            </div>
+        </div>
+        <div class="step-nav">
+            <button type="button" class="btn btn-outline-secondary btn-step-back">Back</button>
+            <button type="button" class="btn btn-primary btn-step-next">Next: Documents</button>
+        </div>
+    </div>
+
+    <div class="form-step-panel">
+        <div class="card mb-4">
+            <div class="card-header">Required Documents</div>
+            <div class="card-body">
+                {% if file_errors %}
+                    <div class="alert alert-danger">
+                        <strong>Some files couldn't be accepted:</strong>
+                        <ul class="mb-0">
+                            {% for err in file_errors %}<li>{{ err }}</li>{% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+                {% if missing_required_docs %}
+                    <div class="alert alert-danger">
+                        Please upload the following required documents: {{ missing_required_docs|join:", " }}
+                    </div>
+                {% endif %}
+                                {% for req in requirements %}
+                    <div class="document-row">
+                        <div class="document-name">
+                            <i class="bi bi-file-earmark"></i> {{ req.name }}
+                            {% if req.required %}<span class="required-flag">*</span>{% endif %}
+                        </div>
+                        {% if req.description %}<div class="document-desc">{{ req.description }}</div>{% endif %}
+                        <input type="file" name="document_{{ req.id }}" class="form-control" accept=".pdf,.jpg,.jpeg,.png" {% if req.required %}data-required="true"{% endif %}>
+                        <div class="invalid-feedback">Please select a file for this required document.</div>
+                        <div class="file-chosen-name"></div>
+                    </div>
+                {% empty %}
+                    <p class="text-muted">No document requirements have been configured yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="step-nav">
+            <button type="button" class="btn btn-outline-secondary btn-step-back">Back</button>
+            <button type="submit" class="btn btn-primary btn-lg">Submit Application</button>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/step-wizard.js' %}"></script>
+<script>initStepWizard("#new-application-form");</script>
+{% endblock %}

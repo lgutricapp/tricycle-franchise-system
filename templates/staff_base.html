@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Staff Console{% endblock %}</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{% static 'css/site.css' %}">
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+<div class="staff-shell">
+    <aside class="staff-sidebar">
+        <div class="sidebar-brand">
+            <div class="system-name">Tricycle Franchise System</div>
+            <div class="small">Staff Console</div>
+        </div>
+                <nav class="nav flex-column">
+            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'core:dashboard' %}">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+
+            <div class="sidebar-section-label">Applications</div>
+            <a class="nav-link {% if request.resolver_match.url_name == 'new_queue' %}active{% endif %}" href="{% url 'staff_applications:new_queue' %}">
+                <i class="bi bi-list-ol"></i> New Application Queue
+            </a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'approved_list' %}active{% endif %}" href="{% url 'staff_applications:approved_list' %}">
+                <i class="bi bi-check-circle"></i> Approved Applications
+            </a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'rejected_list' %}active{% endif %}" href="{% url 'staff_applications:rejected_list' %}">
+                <i class="bi bi-x-circle"></i> Rejected Applications
+            </a>
+
+            <div class="sidebar-section-label">Renewals</div>
+            <a class="nav-link {% if request.resolver_match.url_name == 'renewal_queue' %}active{% endif %}" href="{% url 'staff_applications:renewal_queue' %}">
+                <i class="bi bi-list-ol"></i> Renewal Queue
+            </a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'approved_renewals_list' %}active{% endif %}" href="{% url 'staff_applications:approved_renewals_list' %}">
+                <i class="bi bi-check-circle"></i> Approved Renewals
+            </a>
+
+            <div class="sidebar-section-label">Franchise Registry</div>
+            <a class="nav-link {% if request.resolver_match.namespace == 'franchises' and request.resolver_match.url_name != 'add_manual' and request.resolver_match.url_name != 'expired' %}active{% endif %}" href="{% url 'franchises:list' %}">
+                <i class="bi bi-card-list"></i> Franchise Holders
+            </a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'expired' %}active{% endif %}" href="{% url 'franchises:expired' %}">
+                <i class="bi bi-calendar-x"></i> Expired Franchises
+            </a>
+            {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
+            <a class="nav-link {% if request.resolver_match.url_name == 'add_manual' %}active{% endif %}" href="{% url 'franchises:add_manual' %}">
+                <i class="bi bi-person-plus"></i> Add Manually
+            </a>
+            {% endif %}
+
+            <div class="sidebar-section-label">Communication</div>
+            <a class="nav-link {% if 'notifications' in request.resolver_match.namespace|default:'' %}active{% endif %}" href="{% url 'notifications:bulk_send' %}">
+                <i class="bi bi-megaphone"></i> Send Notification
+            </a>
+
+            <div class="sidebar-section-label">Administration</div>
+            <a class="nav-link" href="/admin/" target="_blank">
+                <i class="bi bi-gear"></i> User Management
+            </a>
+            <a class="nav-link" href="/admin/audit/auditlog/" target="_blank">
+                <i class="bi bi-clock-history"></i> Audit Log
+            </a>
+            <a class="nav-link" href="{% url 'core:home' %}">
+                <i class="bi bi-box-arrow-up-right"></i> View Public Site
+            </a>
+        </nav>
+    </aside>
+
+    <div class="staff-main">
+        <div class="staff-topbar">
+            <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+            <form method="post" action="{% url 'accounts:logout' %}" class="d-flex align-items-center gap-2">
+                {% csrf_token %}
+                <span class="staff-role-pill">{{ user.get_role_display }}</span>
+                <span class="text-muted small">{{ user.get_full_name|default:user.username }}</span>
+                <button type="submit" class="btn btn-outline-secondary btn-sm">Log Out</button>
+            </form>
+        </div>
+
+        <div class="staff-content">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+});
+</script>
+
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

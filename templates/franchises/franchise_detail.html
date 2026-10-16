@@ -1,0 +1,135 @@
+{% extends "staff_base.html" %}
+{% load status_tags %}
+{% block title %}{{ franchise.franchise_number }}{% endblock %}
+{% block page_title %}{{ franchise.franchise_number }}{% endblock %}
+
+{% block content %}
+<p class="text-muted mb-1">
+    <span class="status-badge status-badge--{{ franchise.status|status_tone }}">{{ franchise.get_status_display }}</span>
+    &middot; Expires {{ franchise.expiration_date }}
+</p>
+{% if franchise.source == "MANUAL" or franchise.registered_by %}
+<p class="text-muted small mb-4">
+    {% if franchise.source == "MANUAL" %}Added manually{% else %}Registered from an online application{% endif %}
+    {% if franchise.registered_by %}by <strong>{{ franchise.registered_by.get_full_name|default:franchise.registered_by.username }}</strong>{% endif %}
+    {% if franchise.registered_at %}on {{ franchise.registered_at|date:"M d, Y g:i A" }}{% endif %}
+</p>
+{% else %}
+<div class="mb-4"></div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">Holder</div>
+            <div class="card-body">
+                <p class="mb-1"><strong>{{ franchise.holder.full_name }}</strong></p>
+                <p class="mb-1">{{ franchise.holder.address }}</p>
+                <p class="mb-1">{{ franchise.holder.contact_number }}</p>
+                <p class="mb-0">{{ franchise.holder.email|default:"—" }}</p>
+            </div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header">Vehicle</div>
+            <div class="card-body">
+                <p class="mb-1">Plate: {{ franchise.vehicle.plate_number }}</p>
+                <p class="mb-1">Engine: {{ franchise.vehicle.engine_number }}</p>
+                <p class="mb-1">Chassis: {{ franchise.vehicle.chassis_number }}</p>
+                <p class="mb-0">{{ franchise.vehicle.make }} {{ franchise.vehicle.model }}, {{ franchise.vehicle.color }}</p>
+            </div>
+        </div>
+
+        {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
+        <div class="card mb-4">
+            <div class="card-header">Send Message</div>
+            <div class="card-body">
+                <form method="post" action="{% url 'notifications:send_to_holder' franchise.franchise_number %}">
+                    {% csrf_token %}
+                    <textarea name="message" class="form-control mb-2" rows="4" maxlength="1000" placeholder="Type a message to {{ franchise.holder.full_name }}"></textarea>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Send Message</button>
+                    <div class="form-text">Sent by SMS, and by email if the holder has one on file.</div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                Violations
+                <a href="{% url 'violations:add' franchise.franchise_number %}" class="btn btn-sm btn-outline-danger">Record Violation</a>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead><tr><th>Type</th><th>Date</th><th>Status</th><th>Penalty</th><th></th></tr></thead>
+                    <tbody>
+                        {% for v in violations %}
+                        <tr>
+                            <td>{{ v.violation_type }}</td>
+                            <td>{{ v.date }}</td>
+                            <td><span class="status-badge status-badge--{{ v.status|status_tone }}">{{ v.get_status_display }}</span></td>
+                            <td>{{ v.penalty_amount|default:"—" }}</td>
+                            <td>
+                                {% if v.status == "UNSETTLED" %}
+                                <form method="post" action="{% url 'violations:settle' v.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Mark Settled</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5"><div class="empty-state"><h4>No Violations</h4><p class="mb-0">No violations are on record for this franchise.</p></div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if franchise.source == "MANUAL" %}
+        <div class="card mb-4">
+            <div class="card-header">Documents</div>
+            <div class="card-body">
+                <table class="table">
+                    <thead><tr><th>Document</th><th>Uploaded By</th><th>Uploaded</th><th></th></tr></thead>
+                    <tbody>
+                        {% for doc in documents %}
+                        <tr>
+                            <td>{{ doc.document_requirement.name }}</td>
+                            <td>{% if doc.uploaded_by %}{{ doc.uploaded_by.get_full_name|default:doc.uploaded_by.username }}{% else %}—{% endif %}</td>
+                            <td>{{ doc.uploaded_at|date:"M d, Y g:i A" }}</td>
+                            <td><a href="{{ doc.uploaded_file.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">View File</a></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4"><div class="empty-state"><h4>No Documents</h4><p class="mb-0">No documents were uploaded for this franchise.</p></div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">Application / Renewal History</div>
+            <div class="card-body">
+                <table class="table">
+                    <thead><tr><th>Reference</th><th>Type</th><th>Status</th><th>Submitted</th></tr></thead>
+                    <tbody>
+                        {% for app in applications %}
+                        <tr>
+                            <td>{{ app.reference_code }}</td>
+                            <td>{{ app.get_type_display }}</td>
+                            <td><span class="status-badge status-badge--{{ app.status|status_tone }}">{{ app.get_status_display }}</span></td>
+                            <td>{{ app.submitted_at|date:"M d, Y"|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4"><div class="empty-state"><h4>No History</h4><p class="mb-0">No application history yet for this franchise.</p></div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Application Submitted{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+    <h1 class="mb-3" style="color: var(--color-accent-dark);"><i class="bi bi-check-circle-fill"></i> Application Submitted Successfully</h1>
+    <p class="lead">Your reference code is:</p>
+
+    <div class="reference-code-display" id="reference-code-text">{{ application.reference_code }}</div>
+    <div class="mt-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" id="copy-code-btn">
+            <i class="bi bi-clipboard"></i> Copy Code
+        </button>
+    </div>
+
+    <div class="action-required col-md-6 mx-auto mt-4 text-start">
+        <div class="action-required-title"><i class="bi bi-exclamation-triangle-fill"></i> Important</div>
+        <p class="mb-0">Save this reference code now. You will need it to track your application — it cannot be recovered without it.</p>
+    </div>
+
+    <p class="mt-4"><a href="{% url 'core:home' %}" class="btn btn-outline-secondary">Back to Home</a></p>
+</div>
+
+<script>
+document.getElementById("copy-code-btn").addEventListener("click", function () {
+    const code = document.getElementById("reference-code-text").textContent.trim();
+    navigator.clipboard.writeText(code).then(() => {
+        this.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+        setTimeout(() => { this.innerHTML = '<i class="bi bi-clipboard"></i> Copy Code'; }, 2000);
+    });
+});
+</script>
+{% endblock %}

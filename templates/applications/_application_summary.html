@@ -1,0 +1,43 @@
+{% load status_tags %}
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <h6>Applicant Information</h6>
+        <p class="mb-1"><strong>{{ application.applicant.full_name }}</strong></p>
+        <p class="mb-1">{{ application.applicant.address }}</p>
+        <p class="mb-1">{{ application.applicant.contact_number }}</p>
+        <p class="mb-0">{{ application.applicant.email|default:"—" }}</p>
+    </div>
+    <div class="col-md-6">
+        <h6>Vehicle Information</h6>
+        {% if application.vehicle %}
+            <p class="mb-1">Plate: {{ application.vehicle.plate_number }}</p>
+            <p class="mb-1">Engine: {{ application.vehicle.engine_number }}</p>
+            <p class="mb-1">Chassis: {{ application.vehicle.chassis_number }}</p>
+            <p class="mb-0">{{ application.vehicle.make }} {{ application.vehicle.model }}, {{ application.vehicle.color }}</p>
+        {% else %}
+            <p class="text-muted mb-0">No vehicle on record.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if application.status == "REJECTED" %}
+<div class="p-3 rounded mb-3" style="background-color: var(--color-danger-bg); border-left: 4px solid var(--color-danger);">
+    <h6 class="mb-1" style="color: var(--color-danger);">Reason for Rejection</h6>
+    <p class="mb-0">{{ rejection_entry.remarks|default:"No reason was recorded." }}</p>
+</div>
+{% endif %}
+
+<h6>Status Timeline</h6>
+<ul class="list-group list-group-flush">
+    {% for entry in history %}
+    <li class="list-group-item d-flex justify-content-between align-items-start px-0">
+        <div>
+            <span class="status-badge status-badge--{{ entry.status|status_tone }}">{{ entry.get_status_display }}</span>
+            {% if entry.remarks %}<div class="small text-muted mt-1">{{ entry.remarks }}</div>{% endif %}
+        </div>
+        <span class="text-muted small">{{ entry.changed_at|date:"M d, Y g:i A" }}{% if entry.changed_by %} &middot; {{ entry.changed_by.username }}{% endif %}</span>
+    </li>
+    {% empty %}
+    <li class="list-group-item text-muted px-0">No status history.</li>
+    {% endfor %}
+</ul>

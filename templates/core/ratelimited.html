@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Too Many Attempts{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+    <h1 class="mb-3">Too Many Attempts</h1>
+    <p class="lead text-muted">You've made too many requests in a short time. Please wait a minute and try again.</p>
+    <a href="{% url 'core:home' %}" class="btn btn-outline-primary">Back to Home</a>
+</div>
+{% endblock %}

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% load status_tags %}
+{% block title %}Application Status — {{ application.reference_code }}{% endblock %}
+
+{% block content %}
+<h1 class="mb-1">Application {{ application.reference_code }}</h1>
+<p class="text-muted mb-4">
+    {{ application.get_type_display }} &middot; Submitted {{ application.submitted_at|date:"M d, Y"|default:"—" }}
+</p>
+
+{% if application.status == "REVISION_REQUIRED" or application.status == "RESUBMITTED" %}
+<div class="action-required">
+    <div class="action-required-title"><i class="bi bi-exclamation-triangle-fill"></i> Action Required</div>
+    <p class="mb-0">Your application requires document revision. Please review the flagged document(s) below and upload a replacement.</p>
+</div>
+{% elif application.status == "REJECTED" %}
+<div class="action-required" style="background-color: var(--color-danger-bg); border-color: #E8A6A0;">
+    <div class="action-required-title" style="color: var(--color-danger);"><i class="bi bi-x-circle-fill"></i> Application Rejected</div>
+    <p class="mb-0">Please see the status timeline below for remarks, or contact the LGU office for details.</p>
+</div>
+{% endif %}
+
+<ul class="progress-timeline {% if timeline_is_negative %}is-negative{% endif %}">
+    {% for status, label in timeline_steps %}
+        <li class="{% if timeline_is_negative %}is-done{% elif forloop.counter0 < timeline_current_index %}is-done{% elif forloop.counter0 == timeline_current_index %}is-current{% endif %}">
+            <div class="step-dot">
+                {% if timeline_is_negative %}<i class="bi bi-x"></i>{% elif forloop.counter0 < timeline_current_index %}<i class="bi bi-check"></i>{% else %}{{ forloop.counter }}{% endif %}
+            </div>
+            {{ label }}
+        </li>
+    {% endfor %}
+</ul>
+
+<div class="card mb-4">
+    <div class="card-header">Documents</div>
+    <div class="card-body">
+        {% if resubmit_error %}
+            <div class="alert alert-danger">{{ resubmit_error }}</div>
+        {% endif %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Requirement</th>
+                    <th>Status</th>
+                    <th>Remarks</th>
+                    <th>Uploaded</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                    {% if not doc.superseded_by_set.exists %}
+                    <tr>
+                        <td>{{ doc.document_requirement.name }}</td>
+                        <td>
+                            <i class="bi {{ doc.status|status_icon }} doc-status-icon doc-status-icon--{{ doc.status|status_tone }}"></i>
+                            <span class="status-badge status-badge--{{ doc.status|status_tone }}">{{ doc.get_status_display }}</span>
+                        </td>
+                        <td>{{ doc.admin_remarks|default:"—" }}</td>
+                        <td>{{ doc.uploaded_at|date:"M d, Y" }}</td>
+                        <td>
+                            {% if doc.status == "REVISION_REQUIRED" %}
+                                <button class="btn btn-sm btn-outline-primary" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#resubmit-{{ doc.id }}">
+                                    Upload Replacement
+                                </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if doc.status == "REVISION_REQUIRED" %}
+                    <tr class="collapse" id="resubmit-{{ doc.id }}">
+                        <td colspan="5">
+                            <form method="post" enctype="multipart/form-data" class="d-flex gap-2 align-items-center">
+                                {% csrf_token %}
+                                <input type="hidden" name="resubmit_document_id" value="{{ doc.id }}">
+                                <input type="file" name="replacement_file" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
+                                <button type="submit" class="btn btn-primary">Submit</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endif %}
+                {% empty %}
+                    <tr><td colspan="5"><div class="empty-state"><h4>No Documents</h4><p class="mb-0">No documents are on file for this application.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Status Timeline (Detailed)</div>
+    <div class="card-body">
+        <ul class="list-group list-group-flush">
+            {% for entry in history %}
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="status-badge status-badge--{{ entry.status|status_tone }}">{{ entry.get_status_display }}</span>
+                        {% if entry.remarks %}<div class="small text-muted mt-1">{{ entry.remarks }}</div>{% endif %}
+                    </div>
+                    <span class="text-muted small">{{ entry.changed_at|date:"M d, Y g:i A" }}</span>
+                </li>
+            {% empty %}
+                <li class="list-group-item text-muted">No status history yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

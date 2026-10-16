@@ -1,0 +1,53 @@
+{% extends "staff_base.html" %}
+{% load crispy_forms_tags status_tags %}
+{% block title %}Send Notification{% endblock %}
+{% block page_title %}Send Notification{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header">Announcement to All Franchise Holders</div>
+    <div class="card-body">
+        <p class="text-muted">This message goes to every franchise holder on record. To message one person, open their record under Franchise Holders.</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form|crispy }}
+            <button type="submit" class="btn btn-primary">Send Announcement</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Notification History</div>
+    <div class="card-body">
+        <table class="table table-sm">
+            <thead>
+                <tr><th>Sent</th><th>Channel</th><th>To</th><th>Message</th><th>Status</th><th>Sent By</th></tr>
+            </thead>
+            <tbody>
+                {% for n in page %}
+                <tr>
+                    <td class="text-nowrap">{{ n.sent_at|date:"M d, Y g:i A" }}</td>
+                    <td>{{ n.get_channel_display }}</td>
+                    <td>{{ n.recipient_contact }}</td>
+                    <td>{{ n.message|truncatechars:90 }}</td>
+                    <td><span class="status-badge status-badge--{{ n.delivery_status|status_tone }}">{{ n.get_delivery_status_display }}</span></td>
+                    <td>{% if n.sent_by %}{{ n.sent_by.username }}{% else %}System{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6"><div class="empty-state"><h4>No Messages Yet</h4><p class="mb-0">Every SMS and email the system sends will be listed here.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if page.paginator.num_pages > 1 %}
+        <nav class="mt-3 d-flex justify-content-between align-items-center">
+            <span class="text-muted small">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+            <div class="btn-group">
+                {% if page.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+                {% if page.has_next %}<a class="btn btn-sm btn-outline-secondary" href="?page={{ page.next_page_number }}">Next</a>{% endif %}
+            </div>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
