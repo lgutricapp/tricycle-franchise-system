@@ -6,6 +6,9 @@ from django.utils import timezone
 from apps.applications.models import StatusHistory
 from .models import Franchise
 
+from apps.applications.models import Application, StatusHistory
+from apps.documents.models import ApplicationDocument
+
 
 def refresh_franchise_statuses():
     """
@@ -84,3 +87,40 @@ def build_franchise_timeline(franchise):
 
     events.sort(key=lambda e: e["when"], reverse=True)
     return events
+
+def get_current_documents(franchise):
+    """The most recent approved file for each document requirement on a franchise."""
+    best = {}
+
+    def consider(requirement, uploaded_at, file_field, source):
+        current = best.get(requirement.id)
+        if current is None or uploaded_at > current["uploaded_at"]:
+            best[requirement.id] = {
+                "name": requirement.name,
+                "uploaded_at": uploaded_at,
+                "url": file_field.url if file_field else "",
+                "source": source,
+            }
+
+    # Files uploaded directly to the franchise (manually added franchises)
+    for doc in franchise.documents.select_related("document_requirement", "uploaded_by"):
+        who = ""
+        if doc.uploaded_by:
+            who = " by " + (doc.uploaded_by.get_full_name() or doc.uploaded_by.username)
+        consider(doc.document_requirement, doc.uploaded_at, doc.uploaded_file, "Added manually" + who)
+
+    # Approved files from the franchise's accepted applications and renewals
+    application_docs = ApplicationDocument.objects.filter(
+        application__franchise=franchise,
+        application__status__in=[Application.Status.APPROVED, Application.Status.COMPLETED],
+        status=ApplicationDocument.Status.APPROVED,
+        superseded_by_set__isnull=True,
+    ).select_related("document_requirement", "application")
+    for doc in application_docs:
+        application = doc.application
+        consider(
+            doc.document_requirement, doc.uploaded_at, doc.uploaded_file,
+            f"{application.get_type_display()} {application.reference_code}",
+        )
+
+    return sorted(best.values(), key=lambda d: d["name"])

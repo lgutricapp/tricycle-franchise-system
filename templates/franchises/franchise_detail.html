@@ -87,28 +87,28 @@
             </div>
         </div>
 
-        {% if franchise.source == "MANUAL" %}
         <div class="card mb-4">
-            <div class="card-header">Documents</div>
+            <div class="card-header">Current Documents</div>
             <div class="card-body">
                 <table class="table">
-                    <thead><tr><th>Document</th><th>Uploaded By</th><th>Uploaded</th><th></th></tr></thead>
+                    <thead><tr><th>Document</th><th>Source</th><th>Uploaded</th><th></th></tr></thead>
                     <tbody>
-                        {% for doc in documents %}
+                        {% for doc in current_documents %}
                         <tr>
-                            <td>{{ doc.document_requirement.name }}</td>
-                            <td>{% if doc.uploaded_by %}{{ doc.uploaded_by.get_full_name|default:doc.uploaded_by.username }}{% else %}—{% endif %}</td>
-                            <td>{{ doc.uploaded_at|date:"M d, Y g:i A" }}</td>
-                            <td><a href="{{ doc.uploaded_file.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">View File</a></td>
+                            <td>{{ doc.name }}</td>
+                            <td>{{ doc.source }}</td>
+                            <td>{{ doc.uploaded_at|date:"M d, Y" }}</td>
+                            <td>
+                                {% if doc.url %}<a href="{{ doc.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">View File</a>{% endif %}
+                            </td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="4"><div class="empty-state"><h4>No Documents</h4><p class="mb-0">No documents were uploaded for this franchise.</p></div></td></tr>
+                        <tr><td colspan="4"><div class="empty-state"><h4>No Documents on File</h4><p class="mb-0">No approved documents are on file for this franchise yet.</p></div></td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
-        {% endif %}
 
         <div class="card">
             <div class="card-header">Application / Renewal History</div>

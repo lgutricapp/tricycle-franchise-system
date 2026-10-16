@@ -17,6 +17,7 @@ from .services import (
     build_franchise_timeline,
     current_franchises_queryset,
     expired_franchises_queryset,
+    get_current_documents,
     refresh_franchise_statuses,
 )
 
@@ -54,13 +55,12 @@ def franchise_detail(request, franchise_number):
     )
     violations = franchise.violations.all()
     applications = franchise.applications.order_by("-created_at")
-    documents = franchise.documents.select_related("document_requirement", "uploaded_by")
 
     return render(request, "franchises/franchise_detail.html", {
         "franchise": franchise,
         "violations": violations,
         "applications": applications,
-        "documents": documents,
+        "current_documents": get_current_documents(franchise),
     })
 
 
