@@ -31,5 +31,4 @@ staticfiles/
 .DS_Store
 Thumbs.db
 
-staticfiles/
 logs/
