@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from apps.core import views as core_views
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -12,6 +14,7 @@ urlpatterns = [
     path("staff/franchises/", include("apps.franchises.urls")),
     path("staff/violations/", include("apps.violations.urls")),
     path("staff/notifications/", include("apps.notifications.urls")),
+    path("media/<path:path>", core_views.protected_media, name="protected_media"),
 ]
 
 if settings.DEBUG:

@@ -9,6 +9,12 @@ from apps.violations.models import Violation
 from django.shortcuts import render
 from apps.franchises.services import expired_franchises_queryset, refresh_franchise_statuses
 
+import mimetypes
+from pathlib import Path
+
+from django.conf import settings
+from django.http import FileResponse, Http404
+
 
 def home(request):
     return render(request, "core/home.html")
@@ -49,3 +55,19 @@ def dashboard(request):
     ).order_by("-created_at")[:10]
 
     return render(request, "core/dashboard.html", {"stats": stats, "recent_queue": recent_queue})
+
+@role_required(User.Role.STAFF, User.Role.REVIEWER)
+def protected_media(request, path):
+    """Serve an uploaded file, but only to signed-in staff."""
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    full_path = (media_root / path).resolve()
+    # Refuse anything that escapes the media folder or isn't a real file
+    if media_root not in full_path.parents or not full_path.is_file():
+        raise Http404
+
+    content_type, _ = mimetypes.guess_type(str(full_path))
+    response = FileResponse(open(full_path, "rb"), content_type=content_type or "application/octet-stream")
+    response["Content-Disposition"] = f'inline; filename="{full_path.name}"'
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, no-store"
+    return response
