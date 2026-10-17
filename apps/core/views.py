@@ -1,3 +1,4 @@
+from config import settings
 from datetime import timedelta
 from django.shortcuts import render
 from django.utils import timezone
@@ -12,8 +13,8 @@ from apps.franchises.services import expired_franchises_queryset, refresh_franch
 import mimetypes
 from pathlib import Path
 
-from django.conf import settings
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
+from .services import get_monthly_applications_data, get_available_chart_years
 
 
 def home(request):
@@ -54,7 +55,39 @@ def dashboard(request):
         status__in=ACTIVE_QUEUE_STATUSES_EXCLUDED
     ).order_by("-created_at")[:10]
 
-    return render(request, "core/dashboard.html", {"stats": stats, "recent_queue": recent_queue})
+    chart_data = get_monthly_applications_data("last_12_months")
+    chart_available_years = get_available_chart_years()
+
+    return render(
+        request,
+        "core/dashboard.html",
+        {
+            "stats": stats,
+            "recent_queue": recent_queue,
+            "chart_data": chart_data,
+            "chart_available_years": chart_available_years,
+        },
+    )
+
+
+@role_required(User.Role.STAFF, User.Role.REVIEWER)
+def monthly_applications_chart_data(request):
+    """
+    JSON endpoint providing monthly counts of new applications and renewals
+    for the admin dashboard bar chart.
+    Supports filtering by 'last_12_months' or a specific 'year'.
+    """
+    filter_type = request.GET.get("filter_type", "last_12_months").strip()
+    year = request.GET.get("year", "").strip()
+
+    if filter_type.startswith("year_"):
+        year = filter_type.replace("year_", "")
+        filter_type = "year"
+    elif year:
+        filter_type = "year"
+
+    data = get_monthly_applications_data(filter_type=filter_type, year=year)
+    return JsonResponse(data)
 
 @role_required(User.Role.STAFF, User.Role.REVIEWER)
 def protected_media(request, path):

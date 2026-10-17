@@ -14,6 +14,7 @@ urlpatterns = [
     path("staff/franchises/", include("apps.franchises.urls")),
     path("staff/violations/", include("apps.violations.urls")),
     path("staff/notifications/", include("apps.notifications.urls")),
+    path("staff/reports/", include("apps.reports.urls")),
     path("media/<path:path>", core_views.protected_media, name="protected_media"),
 ]
 

@@ -1,4 +1,5 @@
 {% extends "staff_base.html" %}
+{% load static %}
 {% load status_tags %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
@@ -28,6 +29,55 @@
     </div></div>
 </div>
 
+<!-- Monthly Applications and Renewals Bar Chart Section -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <h5 class="mb-0 text-primary fw-bold d-flex align-items-center gap-2">
+                <i class="bi bi-bar-chart-fill"></i>Monthly Applications and Renewals
+            </h5>
+            <small class="text-muted" id="chartRangeSubtitle">
+                Displaying submissions from <strong>{{ chart_data.start_label }}</strong> to <strong>{{ chart_data.end_label }}</strong>
+            </small>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <!-- Period Summary Counters -->
+            <div class="d-none d-lg-flex align-items-center gap-2">
+                <span class="badge bg-light text-dark border px-2 py-1">
+                    <span class="d-inline-block rounded-circle me-1" style="width: 8px; height: 8px; background-color: #1B3A6B;"></span>
+                    New: <strong id="chartSummaryNew" class="text-primary">{{ chart_data.summary.total_new }}</strong>
+                </span>
+                <span class="badge bg-light text-dark border px-2 py-1">
+                    <span class="d-inline-block rounded-circle me-1" style="width: 8px; height: 8px; background-color: #1C7C54;"></span>
+                    Renewals: <strong id="chartSummaryRenewals" class="text-success">{{ chart_data.summary.total_renewals }}</strong>
+                </span>
+                <span class="badge bg-primary px-2 py-1">
+                    Total: <strong id="chartSummaryTotal">{{ chart_data.summary.total_overall }}</strong>
+                </span>
+            </div>
+            <!-- Filter Dropdown -->
+            <div class="d-flex align-items-center gap-2">
+                <label for="chartFilterSelect" class="form-label mb-0 text-muted small fw-semibold">Period:</label>
+                <select id="chartFilterSelect" class="form-select form-select-sm" style="min-width: 150px;">
+                    <option value="last_12_months" selected>Last 12 Months</option>
+                    {% for y in chart_available_years %}
+                    <option value="year_{{ y }}">Year {{ y }}</option>
+                    {% endfor %}
+                </select>
+                <div id="chartLoadingSpinner" class="spinner-border spinner-border-sm text-primary d-none" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-3 p-md-4">
+        <!-- Responsive Canvas Container -->
+        <div class="chart-container" style="position: relative; height: 320px; width: 100%;">
+            <canvas id="monthlyApplicationsChart"></canvas>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header">Recent Activity Queue</div>
     <div class="card-body">
@@ -49,4 +99,215 @@
         </table>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ chart_data|json_script:"monthly-chart-initial-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+if (typeof Chart === 'undefined') {
+    document.write('<script src="{% static "js/chart.umd.min.js" %}"><\/script>');
+}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const rawDataScript = document.getElementById("monthly-chart-initial-data");
+    const initialChartData = rawDataScript ? JSON.parse(rawDataScript.textContent) : null;
+    const ctx = document.getElementById("monthlyApplicationsChart");
+    const filterSelect = document.getElementById("chartFilterSelect");
+    const subtitle = document.getElementById("chartRangeSubtitle");
+    const summaryNew = document.getElementById("chartSummaryNew");
+    const summaryRenewals = document.getElementById("chartSummaryRenewals");
+    const summaryTotal = document.getElementById("chartSummaryTotal");
+    const spinner = document.getElementById("chartLoadingSpinner");
+
+    if (!ctx || !initialChartData || typeof Chart === "undefined") {
+        return;
+    }
+
+    // Design Tokens matching site.css
+    const COLOR_PRIMARY = "#1B3A6B";
+    const COLOR_PRIMARY_HOVER = "#142C52";
+    const COLOR_ACCENT = "#1C7C54";
+    const COLOR_ACCENT_HOVER = "#145C3F";
+    const COLOR_GRID = "#E5E7EB";
+    const COLOR_TEXT = "#5B6B7C";
+
+    const chartConfig = {
+        type: "bar",
+        data: {
+            labels: initialChartData.labels,
+            datasets: [
+                {
+                    label: "New Applications",
+                    data: initialChartData.new_applications,
+                    backgroundColor: "rgba(27, 58, 107, 0.85)",
+                    borderColor: COLOR_PRIMARY,
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    hoverBackgroundColor: COLOR_PRIMARY_HOVER,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.7,
+                },
+                {
+                    label: "Franchise Renewals",
+                    data: initialChartData.renewals,
+                    backgroundColor: "rgba(28, 124, 84, 0.85)",
+                    borderColor: COLOR_ACCENT,
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    hoverBackgroundColor: COLOR_ACCENT_HOVER,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.7,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: "index",
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: "top",
+                    align: "end",
+                    labels: {
+                        boxWidth: 14,
+                        boxHeight: 14,
+                        borderRadius: 3,
+                        useBorderRadius: true,
+                        color: "#1F2937",
+                        font: {
+                            family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                            size: 12,
+                            weight: "600",
+                        },
+                        padding: 16,
+                    },
+                },
+                tooltip: {
+                    backgroundColor: "rgba(20, 44, 82, 0.95)",
+                    titleColor: "#FFFFFF",
+                    bodyColor: "#FFFFFF",
+                    footerColor: "#F4F6F8",
+                    padding: 10,
+                    cornerRadius: 6,
+                    boxPadding: 4,
+                    usePointStyle: true,
+                    titleFont: {
+                        weight: "bold",
+                        size: 13,
+                    },
+                    bodyFont: {
+                        size: 12,
+                    },
+                    footerFont: {
+                        weight: "bold",
+                        size: 12,
+                    },
+                    callbacks: {
+                        footer: function (tooltipItems) {
+                            let total = 0;
+                            tooltipItems.forEach(function (item) {
+                                total += item.parsed.y || 0;
+                            });
+                            return "Total Submissions: " + total;
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false,
+                    },
+                    ticks: {
+                        color: COLOR_TEXT,
+                        font: {
+                            family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                            size: 11,
+                        },
+                        maxRotation: 45,
+                        minRotation: 0,
+                    },
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0,
+                        color: COLOR_TEXT,
+                        font: {
+                            family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                            size: 11,
+                        },
+                    },
+                    title: {
+                        display: true,
+                        text: "Number of Applications",
+                        color: COLOR_TEXT,
+                        font: {
+                            size: 12,
+                            weight: "600",
+                        },
+                    },
+                    grid: {
+                        color: COLOR_GRID,
+                    },
+                },
+            },
+        },
+    };
+
+    const myChart = new Chart(ctx, chartConfig);
+
+    function updateSummaryUI(data) {
+        if (subtitle && data.start_label && data.end_label) {
+            subtitle.innerHTML = `Displaying submissions from <strong>${data.start_label}</strong> to <strong>${data.end_label}</strong>`;
+        }
+        if (data.summary) {
+            if (summaryNew) summaryNew.textContent = data.summary.total_new;
+            if (summaryRenewals) summaryRenewals.textContent = data.summary.total_renewals;
+            if (summaryTotal) summaryTotal.textContent = data.summary.total_overall;
+        }
+    }
+
+    if (filterSelect) {
+        filterSelect.addEventListener("change", function () {
+            const selectedVal = filterSelect.value;
+            const endpoint = "{% url 'core:monthly_applications_data' %}";
+            const url = `${endpoint}?filter_type=${encodeURIComponent(selectedVal)}`;
+
+            if (spinner) spinner.classList.remove("d-none");
+            filterSelect.disabled = true;
+
+            fetch(url, {
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            })
+                .then(function (res) {
+                    if (!res.ok) throw new Error("Network response was not ok");
+                    return res.json();
+                })
+                .then(function (data) {
+                    myChart.data.labels = data.labels;
+                    myChart.data.datasets[0].data = data.new_applications;
+                    myChart.data.datasets[1].data = data.renewals;
+                    myChart.update();
+                    updateSummaryUI(data);
+                })
+                .catch(function (err) {
+                    console.error("Error fetching chart data:", err);
+                })
+                .finally(function () {
+                    if (spinner) spinner.classList.add("d-none");
+                    filterSelect.disabled = false;
+                });
+        });
+    }
+});
+</script>
 {% endblock %}

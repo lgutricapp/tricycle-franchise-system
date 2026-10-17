@@ -1,0 +1,351 @@
+{% extends "staff_base.html" %}
+{% load status_tags %}
+
+{% block title %}Report Generation — Staff Console{% endblock %}
+{% block page_title %}Report Generation{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0 text-primary fw-bold">
+                            <i class="bi bi-funnel-fill me-2"></i>Report Filters
+                        </h5>
+                        <small class="text-muted">Select report parameters, date range, and export format.</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                {% if validation_error %}
+                <div class="alert alert-danger d-flex align-items-center gap-2 mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                    <div>{{ validation_error }}</div>
+                </div>
+                {% endif %}
+
+                <div id="clientErrorAlert" class="alert alert-danger d-none align-items-center gap-2 mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                    <div id="clientErrorMessage"></div>
+                </div>
+
+                <form method="get" action="{% url 'reports:index' %}" id="reportFilterForm">
+                    <div class="row g-3">
+                        <!-- Report Type -->
+                        <div class="col-lg-3 col-md-6">
+                            <label for="reportTypeSelect" class="form-label fw-semibold text-secondary small">Report Type</label>
+                            <select name="report_type" id="reportTypeSelect" class="form-select">
+                                {% for val, label in report_type_choices %}
+                                <option value="{{ val }}" {% if report_type == val %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Start Date -->
+                        <div class="col-lg-3 col-md-6">
+                            <label for="startDateInput" class="form-label fw-semibold text-secondary small">Start Date</label>
+                            <input type="date" name="start_date" id="startDateInput" class="form-control" value="{{ start_date }}" placeholder="YYYY-MM-DD">
+                        </div>
+
+                        <!-- End Date -->
+                        <div class="col-lg-3 col-md-6">
+                            <label for="endDateInput" class="form-label fw-semibold text-secondary small">End Date</label>
+                            <input type="date" name="end_date" id="endDateInput" class="form-control" value="{{ end_date }}" placeholder="YYYY-MM-DD">
+                        </div>
+
+                        <!-- Status Filter (Dynamic) -->
+                        <div class="col-lg-3 col-md-6" id="statusFilterGroup">
+                            <label for="statusSelect" class="form-label fw-semibold text-secondary small" id="statusFilterLabel">Status Filter</label>
+                            <select name="status" id="statusSelect" class="form-select">
+                                <option value="">All Statuses</option>
+                                <!-- Populated dynamically by JS or rendered default -->
+                                {% if report_type == 'franchise_registry' %}
+                                    {% for val, label in franchise_status_choices %}
+                                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                {% else %}
+                                    {% for val, label in application_status_choices %}
+                                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                            <small class="text-muted d-none" id="statusFilterHelp">Not applicable for aggregate summary.</small>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-4 pt-3 border-top">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" class="btn btn-primary px-3">
+                                <i class="bi bi-file-earmark-bar-graph me-1"></i> Generate Report
+                            </button>
+                            <a href="{% url 'reports:index' %}" class="btn btn-outline-secondary px-3">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Filters
+                            </a>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" name="export" value="csv" class="btn btn-outline-success px-3">
+                                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Download CSV
+                            </button>
+                            <button type="submit" name="export" value="pdf" class="btn btn-outline-danger px-3">
+                                <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if report_data %}
+<!-- Results Section -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <h5 class="mb-0 text-primary fw-bold">{{ report_data.title }}</h5>
+                <span class="badge bg-primary rounded-pill">{{ report_data.count }} record{% if report_data.count != 1 %}s{% endif %}</span>
+            </div>
+            <div class="text-muted small mt-1">
+                <span><i class="bi bi-calendar3 me-1"></i>Date Range:
+                    {% if report_data.start_date and report_data.end_date %}
+                        <strong>{{ report_data.start_date }}</strong> to <strong>{{ report_data.end_date }}</strong>
+                    {% elif report_data.start_date %}
+                        From <strong>{{ report_data.start_date }}</strong>
+                    {% elif report_data.end_date %}
+                        Up to <strong>{{ report_data.end_date }}</strong>
+                    {% else %}
+                        <strong>All Recorded Dates</strong>
+                    {% endif %}
+                </span>
+                <span class="mx-2">&bull;</span>
+                <span><i class="bi bi-funnel me-1"></i>Status: <strong>{{ report_data.status_display }}</strong></span>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'reports:index' %}?{{ query_string }}&export=csv" class="btn btn-sm btn-outline-success" title="Download spreadsheet">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Download CSV
+            </a>
+            <a href="{% url 'reports:index' %}?{{ query_string }}&export=pdf" class="btn btn-sm btn-outline-danger" title="Download printable PDF">
+                <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF
+            </a>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        {% if report_data.is_summary %}
+        <!-- Status Summary Table -->
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        {% for h in report_data.headers %}
+                        <th class="py-3 px-3 {% if forloop.first %}ps-4{% endif %}">{{ h }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in report_data.rows %}
+                    <tr>
+                        <td class="ps-4">
+                            <span class="status-badge status-badge--{{ row.status_code|status_tone }}">
+                                <i class="bi {{ row.status_code|status_icon }} me-1"></i>{{ row.status_name }}
+                            </span>
+                        </td>
+                        <td class="px-3 fw-semibold">{{ row.new_count }}</td>
+                        <td class="px-3 fw-semibold">{{ row.renewal_count }}</td>
+                        <td class="px-3 fw-bold text-primary">{{ row.total_count }}</td>
+                        <td class="px-3">
+                            <div class="d-flex align-items-center gap-2" style="max-width: 180px;">
+                                <div class="progress flex-grow-1" style="height: 6px;">
+                                    <div class="progress-bar bg-primary report-progress-bar" role="progressbar" data-width="{{ row.percentage }}" aria-valuenow="{{ row.percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <span class="small fw-semibold text-muted">{{ row.percentage }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if report_data.totals %}
+                <tfoot class="table-group-divider bg-light">
+                    <tr class="fw-bold">
+                        <td class="ps-4 py-3">{{ report_data.totals.status_name }}</td>
+                        <td class="px-3 py-3">{{ report_data.totals.new_count }}</td>
+                        <td class="px-3 py-3">{{ report_data.totals.renewal_count }}</td>
+                        <td class="px-3 py-3 text-primary">{{ report_data.totals.total_count }}</td>
+                        <td class="px-3 py-3">{{ report_data.totals.percentage }}%</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+        <script>
+            document.querySelectorAll(".report-progress-bar").forEach(function (bar) {
+                bar.style.width = (bar.getAttribute("data-width") || 0) + "%";
+            });
+        </script>
+
+        {% elif report_data.rows %}
+        <!-- Application / Registry Table -->
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        {% for h in report_data.headers %}
+                        <th class="py-3 px-3 {% if forloop.first %}ps-4{% endif %}">{{ h }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if report_data.report_type == 'franchise_registry' %}
+                        {% for f in report_data.rows %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-primary">{{ f.franchise_number }}</td>
+                            <td class="px-3">{{ f.holder_name }}</td>
+                            <td class="px-3 font-monospace">{{ f.plate_number }}</td>
+                            <td class="px-3">{{ f.make_model }}</td>
+                            <td class="px-3">{{ f.date_issued }}</td>
+                            <td class="px-3">{{ f.expiration_date }}</td>
+                            <td class="px-3">
+                                <span class="status-badge status-badge--{{ f.status|status_tone }}">
+                                    <i class="bi {{ f.status|status_icon }} me-1"></i>{{ f.status_display }}
+                                </span>
+                            </td>
+                            <td class="px-3 text-muted small">{{ f.contact_number }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for app in report_data.rows %}
+                        <tr>
+                            <td class="ps-4 fw-bold font-monospace text-primary">{{ app.reference_number }}</td>
+                            <td class="px-3 fw-semibold">{{ app.applicant_name }}</td>
+                            <td class="px-3 font-monospace">{{ app.franchise_number }}</td>
+                            <td class="px-3"><span class="badge bg-light text-dark border">{{ app.application_type }}</span></td>
+                            <td class="px-3 text-muted small">{{ app.submission_date }}</td>
+                            <td class="px-3">
+                                <span class="status-badge status-badge--{{ app.status|status_tone }}">
+                                    <i class="bi {{ app.status|status_icon }} me-1"></i>{{ app.status_display }}
+                                </span>
+                            </td>
+                            <td class="px-3 font-monospace">{{ app.plate_number }}</td>
+                            <td class="px-3 text-muted small">{{ app.contact_number }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        {% else %}
+        <!-- Empty Results Notice -->
+        <div class="text-center py-5">
+            <i class="bi bi-inbox text-muted display-4 d-block mb-3"></i>
+            <h5 class="fw-bold text-dark">No Matching Records Found</h5>
+            <p class="text-muted mb-0">No records were found matching the selected report type, date range, or status filter.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ application_status_choices|json_script:"application-status-data" }}
+{{ franchise_status_choices|json_script:"franchise-status-data" }}
+{{ status|default:''|json_script:"current-status-data" }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // Initialize report progress bar widths
+    document.querySelectorAll(".report-progress-bar").forEach(function (bar) {
+        bar.style.width = (bar.getAttribute("data-width") || 0) + "%";
+    });
+    const reportTypeSelect = document.getElementById("reportTypeSelect");
+    const statusSelect = document.getElementById("statusSelect");
+    const statusFilterGroup = document.getElementById("statusFilterGroup");
+    const statusFilterLabel = document.getElementById("statusFilterLabel");
+    const statusFilterHelp = document.getElementById("statusFilterHelp");
+    const form = document.getElementById("reportFilterForm");
+    const startDateInput = document.getElementById("startDateInput");
+    const endDateInput = document.getElementById("endDateInput");
+    const clientErrorAlert = document.getElementById("clientErrorAlert");
+    const clientErrorMessage = document.getElementById("clientErrorMessage");
+
+    const rawAppChoices = JSON.parse(document.getElementById("application-status-data")?.textContent || "[]");
+    const rawFranChoices = JSON.parse(document.getElementById("franchise-status-data")?.textContent || "[]");
+    const currentStatusValue = JSON.parse(document.getElementById("current-status-data")?.textContent || '""');
+
+    const applicationStatusOptions = [
+        { value: "", label: "All Statuses" },
+        ...rawAppChoices.map(([value, label]) => ({ value, label }))
+    ];
+
+    const franchiseStatusOptions = [
+        { value: "", label: "All Statuses" },
+        ...rawFranChoices.map(([value, label]) => ({ value, label }))
+    ];
+
+    function updateStatusFilterUI() {
+        const selectedType = reportTypeSelect.value;
+
+        if (selectedType === "status_summary") {
+            statusSelect.disabled = true;
+            statusSelect.innerHTML = '<option value="">All Statuses (Aggregated)</option>';
+            statusFilterLabel.classList.add("text-muted");
+            statusFilterHelp.classList.remove("d-none");
+        } else if (selectedType === "franchise_registry") {
+            statusSelect.disabled = false;
+            statusFilterLabel.classList.remove("text-muted");
+            statusFilterLabel.textContent = "Franchise Status";
+            statusFilterHelp.classList.add("d-none");
+
+            let html = "";
+            franchiseStatusOptions.forEach(opt => {
+                const selected = (opt.value === currentStatusValue) ? "selected" : "";
+                html += `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
+            });
+            statusSelect.innerHTML = html;
+        } else {
+            // New Applications or Renewals
+            statusSelect.disabled = false;
+            statusFilterLabel.classList.remove("text-muted");
+            statusFilterLabel.textContent = "Application Status";
+            statusFilterHelp.classList.add("d-none");
+
+            let html = "";
+            applicationStatusOptions.forEach(opt => {
+                const selected = (opt.value === currentStatusValue) ? "selected" : "";
+                html += `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
+            });
+            statusSelect.innerHTML = html;
+        }
+    }
+
+    reportTypeSelect.addEventListener("change", function () {
+        updateStatusFilterUI();
+    });
+
+    // Client-side date range validation
+    form.addEventListener("submit", function (e) {
+        const startVal = startDateInput.value;
+        const endVal = endDateInput.value;
+
+        if (startVal && endVal && endVal < startVal) {
+            e.preventDefault();
+            clientErrorMessage.textContent = "End date cannot be earlier than start date.";
+            clientErrorAlert.classList.remove("d-none");
+            clientErrorAlert.classList.add("d-flex");
+            endDateInput.focus();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            return false;
+        }
+        clientErrorAlert.classList.add("d-none");
+        clientErrorAlert.classList.remove("d-flex");
+    });
+
+    // Run on initial load
+    updateStatusFilterUI();
+});
+</script>
+{% endblock %}

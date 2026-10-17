@@ -60,6 +60,13 @@
                 <i class="bi bi-megaphone"></i> Send Notification
             </a>
 
+            {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
+            <div class="sidebar-section-label">Reports</div>
+            <a class="nav-link {% if request.resolver_match.app_name == 'reports' or request.resolver_match.namespace == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}">
+                <i class="bi bi-file-earmark-bar-graph"></i> Reports
+            </a>
+            {% endif %}
+
             <div class="sidebar-section-label">Administration</div>
             <a class="nav-link" href="/admin/" target="_blank">
                 <i class="bi bi-gear"></i> User Management
