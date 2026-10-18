@@ -61,6 +61,7 @@
                 <a href="{% url 'violations:add' franchise.franchise_number %}" class="btn btn-sm btn-outline-danger">Record Violation</a>
             </div>
             <div class="card-body">
+                <div class="table-responsive">
                 <table class="table">
                     <thead><tr><th>Type</th><th>Date</th><th>Status</th><th>Penalty</th><th></th></tr></thead>
                     <tbody>
@@ -84,12 +85,14 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
 
         <div class="card mb-4">
             <div class="card-header">Current Documents</div>
             <div class="card-body">
+                <div class="table-responsive">
                 <table class="table">
                     <thead><tr><th>Document</th><th>Source</th><th>Uploaded</th><th></th></tr></thead>
                     <tbody>
@@ -107,12 +110,14 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
 
         <div class="card">
             <div class="card-header">Application / Renewal History</div>
             <div class="card-body">
+                <div class="table-responsive">
                 <table class="table">
                     <thead><tr><th>Reference</th><th>Type</th><th>Status</th><th>Submitted</th></tr></thead>
                     <tbody>
@@ -128,6 +133,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>

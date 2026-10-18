@@ -15,10 +15,17 @@
 <div class="staff-shell">
     <aside class="staff-sidebar">
         <div class="sidebar-brand">
-            <div class="system-name">Tricycle Franchise System</div>
-            <div class="small">Staff Console</div>
+            <a href="{% url 'core:dashboard' %}" class="staff-brand-link">
+                <img src="{% static 'images/bontoc-lgu-logo.png' %}" class="staff-brand-logo" alt="">
+                <span>
+                    <span class="system-name">Bontoc LGU</span>
+                    <span class="small">Franchise Management</span>
+                </span>
+            </a>
         </div>
-                <nav class="nav flex-column">
+        <div class="collapse staff-navigation" id="staffNavigation">
+        <nav class="nav flex-column" aria-label="Staff navigation">
+            <div class="sidebar-section-label">Overview</div>
             <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'core:dashboard' %}">
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
@@ -27,22 +34,20 @@
             <a class="nav-link {% if request.resolver_match.url_name == 'new_queue' %}active{% endif %}" href="{% url 'staff_applications:new_queue' %}">
                 <i class="bi bi-list-ol"></i> New Application Queue
             </a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'renewal_queue' %}active{% endif %}" href="{% url 'staff_applications:renewal_queue' %}">
+                <i class="bi bi-arrow-repeat"></i> Renewal Queue
+            </a>
             <a class="nav-link {% if request.resolver_match.url_name == 'approved_list' %}active{% endif %}" href="{% url 'staff_applications:approved_list' %}">
                 <i class="bi bi-check-circle"></i> Approved Applications
             </a>
             <a class="nav-link {% if request.resolver_match.url_name == 'rejected_list' %}active{% endif %}" href="{% url 'staff_applications:rejected_list' %}">
                 <i class="bi bi-x-circle"></i> Rejected Applications
             </a>
-
-            <div class="sidebar-section-label">Renewals</div>
-            <a class="nav-link {% if request.resolver_match.url_name == 'renewal_queue' %}active{% endif %}" href="{% url 'staff_applications:renewal_queue' %}">
-                <i class="bi bi-list-ol"></i> Renewal Queue
-            </a>
             <a class="nav-link {% if request.resolver_match.url_name == 'approved_renewals_list' %}active{% endif %}" href="{% url 'staff_applications:approved_renewals_list' %}">
                 <i class="bi bi-check-circle"></i> Approved Renewals
             </a>
 
-            <div class="sidebar-section-label">Franchise Registry</div>
+            <div class="sidebar-section-label">Management</div>
             <a class="nav-link {% if request.resolver_match.namespace == 'franchises' and request.resolver_match.url_name != 'add_manual' and request.resolver_match.url_name != 'expired' %}active{% endif %}" href="{% url 'franchises:list' %}">
                 <i class="bi bi-card-list"></i> Franchise Holders
             </a>
@@ -55,19 +60,17 @@
             </a>
             {% endif %}
 
-            <div class="sidebar-section-label">Communication</div>
             <a class="nav-link {% if 'notifications' in request.resolver_match.namespace|default:'' %}active{% endif %}" href="{% url 'notifications:bulk_send' %}">
                 <i class="bi bi-megaphone"></i> Send Notification
             </a>
 
             {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
-            <div class="sidebar-section-label">Reports</div>
             <a class="nav-link {% if request.resolver_match.app_name == 'reports' or request.resolver_match.namespace == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}">
                 <i class="bi bi-file-earmark-bar-graph"></i> Reports
             </a>
             {% endif %}
 
-            <div class="sidebar-section-label">Administration</div>
+            <div class="sidebar-section-label">System</div>
             <a class="nav-link" href="/admin/" target="_blank">
                 <i class="bi bi-gear"></i> User Management
             </a>
@@ -78,12 +81,20 @@
                 <i class="bi bi-box-arrow-up-right"></i> View Public Site
             </a>
         </nav>
+        </div>
     </aside>
 
     <div class="staff-main">
         <div class="staff-topbar">
-            <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
-            <form method="post" action="{% url 'accounts:logout' %}" class="d-flex align-items-center gap-2">
+            <div class="staff-topbar-heading">
+                <button class="btn btn-outline-secondary staff-nav-toggle" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#staffNavigation"
+                        aria-controls="staffNavigation" aria-expanded="false" aria-label="Toggle navigation">
+                    <i class="bi bi-list" aria-hidden="true"></i>
+                </button>
+                <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+            </div>
+            <form method="post" action="{% url 'accounts:logout' %}" class="staff-account d-flex align-items-center gap-2">
                 {% csrf_token %}
                 <span class="staff-role-pill">{{ user.get_role_display }}</span>
                 <span class="text-muted small">{{ user.get_full_name|default:user.username }}</span>

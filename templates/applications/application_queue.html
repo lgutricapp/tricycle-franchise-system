@@ -6,6 +6,7 @@
 {% block content %}
 <div class="card">
     <div class="card-body">
+        <div class="table-responsive">
         <table class="table">
             <thead><tr><th>#</th><th>Applicant</th><th>Reference Code</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
             <tbody>
@@ -18,14 +19,14 @@
                     <td>
                         <span class="status-badge status-badge--{{ app.status|status_tone }}">{{ app.get_status_display }}</span>
                         {% if app.status == "RESUBMITTED" %}
-                            <span class="status-badge status-badge--success ms-1"><i class="bi bi-arrow-repeat"></i> Documents Updated</span>
+                            <span class="status-badge status-badge--updated ms-1"><i class="bi bi-arrow-repeat"></i> Documents Updated</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if front and app.pk == front.pk %}
                             <a href="{% url 'staff_applications:detail' app.reference_code %}" class="btn btn-sm btn-primary">Review</a>
                         {% elif app.status == "REVISION_REQUIRED" %}
-                            <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Waiting for Revisions</span>
+                            <span class="status-badge status-badge--neutral"><i class="bi bi-hourglass-split"></i> Waiting for Revisions</span>
                         {% else %}
                             <span class="text-muted small"><i class="bi bi-lock"></i> Locked — previous application must be completed first</span>
                         {% endif %}
@@ -36,6 +37,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 {% endblock %}

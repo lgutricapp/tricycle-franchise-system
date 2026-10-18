@@ -8,42 +8,54 @@
 
     <section class="landing-hero">
         <div class="container">
+            <p class="landing-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>Bontoc Local Government Unit</p>
             <h1>Tricycle Franchise Online Services</h1>
-            <p class="lead">
-                Apply for a new franchise, renew an existing one, or track your application — all online, without visiting the office.
-            </p>
         </div>
     </section>
 
     <section class="landing-services">
         <div class="container">
-            <div class="row g-4 justify-content-center">
+            <div class="row g-4 justify-content-center" aria-label="Online franchise services">
 
                 <div class="col-md-4">
-                    <div class="service-card">
-                        <div class="service-icon"><i class="bi bi-file-earmark-text"></i></div>
+                    <a href="{% url 'applications:new' %}" class="service-card service-card-link">
+                        <span class="service-icon" aria-hidden="true">
+                            <svg class="feature-icon feature-icon--check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="9"></circle>
+                                <path class="feature-check-path" d="m8 12 2.5 2.5L16.5 9" pathLength="1" stroke-dasharray="1"></path>
+                            </svg>
+                        </span>
                         <h3>New Franchise Application</h3>
-                        <p>Submit a new application for a tricycle franchise, including vehicle and document requirements.</p>
-                        <a href="{% url 'applications:new' %}" class="btn btn-primary">Apply Now</a>
-                    </div>
+                        <p>Apply online for a new tricycle franchise.</p>
+                        <span class="service-card-action">Apply now</span>
+                    </a>
                 </div>
 
                 <div class="col-md-4">
-                    <div class="service-card">
-                        <div class="service-icon"><i class="bi bi-arrow-repeat"></i></div>
+                    <a href="{% url 'applications:renewal_lookup' %}" class="service-card service-card-link">
+                        <span class="service-icon" aria-hidden="true">
+                            <svg class="feature-icon feature-icon--bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M13.2 2.5 5.8 13h5.3l-.5 8.5L18.2 11h-5.3l.3-8.5Z"></path>
+                            </svg>
+                        </span>
                         <h3>Franchise Renewal</h3>
-                        <p>Renew an existing tricycle franchise using your franchise number and holder name.</p>
-                        <a href="{% url 'applications:renewal_lookup' %}" class="btn btn-primary">Renew Franchise</a>
-                    </div>
+                        <p>Renew your existing franchise online.</p>
+                        <span class="service-card-action">Renew franchise</span>
+                    </a>
                 </div>
 
                 <div class="col-md-4">
-                    <div class="service-card">
-                        <div class="service-icon"><i class="bi bi-search"></i></div>
+                    <a href="{% url 'applications:track' %}" class="service-card service-card-link">
+                        <span class="service-icon" aria-hidden="true">
+                            <svg class="feature-icon feature-icon--bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+                                <path d="M10 21h4"></path>
+                            </svg>
+                        </span>
                         <h3>Manage Existing Application</h3>
-                        <p>Check the status of your application or renewal, and respond to document revisions, using your reference code.</p>
-                        <a href="{% url 'applications:track' %}" class="btn btn-primary">Track Application</a>
-                    </div>
+                        <p>Track your application and respond to requests.</p>
+                        <span class="service-card-action">Track application</span>
+                    </a>
                 </div>
 
             </div>

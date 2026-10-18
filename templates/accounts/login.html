@@ -3,7 +3,8 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-4">
+    <div class="col-md-5 col-lg-4">
+        <div class="auth-panel p-4 p-md-5">
         <h2 class="mb-4">Staff Login</h2>
         <form method="post">
             {% csrf_token %}
@@ -20,6 +21,7 @@
             </div>
             <button type="submit" class="btn btn-primary w-100">Log In</button>
         </form>
+        </div>
     </div>
 </div>
 {% endblock %}

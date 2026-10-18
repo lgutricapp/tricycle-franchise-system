@@ -46,3 +46,47 @@ class RoleAccessTests(TestCase):
         })
         self.application.refresh_from_db()
         self.assertEqual(self.application.status, Application.Status.SUBMITTED)  # unchanged — blocked
+
+
+class LoginRedirectTests(TestCase):
+    def test_staff_login_redirects_to_dashboard(self):
+        User.objects.create_user(
+            username="admin_staff",
+            password="test-password",
+            role=User.Role.STAFF,
+        )
+
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "admin_staff", "password": "test-password"},
+        )
+
+        self.assertRedirects(response, reverse("core:dashboard"))
+
+    def test_super_admin_login_redirects_to_dashboard(self):
+        User.objects.create_user(
+            username="super_admin",
+            password="test-password",
+            role=User.Role.SUPER_ADMIN,
+        )
+
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "super_admin", "password": "test-password"},
+        )
+
+        self.assertRedirects(response, reverse("core:dashboard"))
+
+    def test_reviewer_keeps_default_login_redirect(self):
+        User.objects.create_user(
+            username="reviewer",
+            password="test-password",
+            role=User.Role.REVIEWER,
+        )
+
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "reviewer", "password": "test-password"},
+        )
+
+        self.assertRedirects(response, reverse("core:home"))

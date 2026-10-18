@@ -15,7 +15,7 @@
     <header class="gov-header">
         <div class="container d-flex justify-content-between align-items-center flex-wrap gap-3">
             <a href="{% url 'core:home' %}" class="gov-brand">
-                <div class="gov-brand-seal">LGU</div>
+                <img src="{% static 'images/bontoc-lgu-logo.png' %}" class="gov-brand-logo" alt="Municipality of Bontoc logo">
                 <div class="gov-brand-text">
                     <div class="lgu-name">Local Government Unit of Bontoc</div>
                     <div class="system-name">Tricycle Franchise Management System</div>
@@ -23,17 +23,24 @@
             </a>
 
             {% if user.is_authenticated %}
-            <form method="post" action="{% url 'accounts:logout' %}" class="d-flex align-items-center gap-2">
-                {% csrf_token %}
-                <a href="{% url 'core:dashboard' %}" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-speedometer2"></i> Dashboard
+            <div class="gov-account">
+                <a href="{% url 'core:dashboard' %}" class="btn btn-primary btn-sm gov-dashboard-link">
+                    <i class="bi bi-speedometer2" aria-hidden="true"></i> Dashboard
                 </a>
-                <span class="text-muted small">{{ user.get_full_name|default:user.username }}</span>
-                <button type="submit" class="btn btn-outline-secondary btn-sm">Log Out</button>
-            </form>
+                <div class="gov-account-identity">
+                    <span class="gov-account-name">{{ user.get_full_name|default:user.username }}</span>
+                    {% if user.get_role_display %}
+                    <span class="gov-account-role">{{ user.get_role_display }}</span>
+                    {% endif %}
+                </div>
+                <form method="post" action="{% url 'accounts:logout' %}" class="gov-logout-form">
+                {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">Log Out</button>
+                </form>
+            </div>
             {% else %}
-            <a href="{% url 'accounts:login' %}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-box-arrow-in-right"></i> Staff Login
+            <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-sm gov-login-link">
+                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Staff Login
             </a>
             {% endif %}
         </div>
@@ -49,7 +56,17 @@
 
     {% block hero %}{% endblock %}
 
-    <main class="container my-4">
+    <main class="client-page">
+        {% if request.resolver_match.url_name != "home" %}
+        <div class="client-page-beams" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        {% endif %}
+        <div class="container my-4 client-page-content">
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{{ message.tags }}">{{ message }}</div>
@@ -57,6 +74,7 @@
         {% endif %}
 
         {% block content %}{% endblock %}
+        </div>
     </main>
 
     <footer class="gov-footer">
