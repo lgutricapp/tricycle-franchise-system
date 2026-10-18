@@ -17,6 +17,10 @@
             {% csrf_token %}
             {{ form|crispy }}
             <button type="submit" class="btn btn-primary w-100">Find My Franchise</button>
+            <p class="small text-muted mt-3 mb-0">
+                Your details are used to locate your franchise record. See our
+                <a href="{% url 'core:privacy' %}">Privacy Policy</a>.
+            </p>
         </form>
         </div>
     </div>

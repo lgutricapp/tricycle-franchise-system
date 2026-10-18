@@ -40,6 +40,8 @@ class RoleAccessTests(TestCase):
 
         get_response = self.client.get(url)
         self.assertEqual(get_response.status_code, 200)  # Reviewer CAN view
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.SUBMITTED)
 
         self.client.post(url, {
             "action": "transition_status", "new_status": "UNDER_REVIEW", "remarks": "trying to sneak this through",

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Terms &amp; Conditions{% endblock %}
+
+{% block content %}
+<article class="mx-auto" style="max-width: 860px">
+    <h1 class="mb-2">Terms &amp; Conditions</h1>
+    <p class="text-muted">Effective date: October 18, 2026</p>
+
+    <p>
+        These terms apply to the public online services of the Local Government Unit (LGU) of Bontoc
+        Tricycle Franchise Management System. By using the service or submitting an application or
+        renewal, you agree to these terms.
+    </p>
+
+    <h2 class="h4 mt-4">Using the online service</h2>
+    <p>
+        Use the service only for a genuine franchise application, renewal, or application-status inquiry.
+        Provide complete and accurate information, and submit only documents you are authorized to provide.
+        Do not attempt to access, alter, disrupt, or misuse another person's application or the service.
+    </p>
+
+    <h2 class="h4 mt-4">Application review and decisions</h2>
+    <p>
+        Submitting an application online does not guarantee approval or the issuance or renewal of a
+        franchise. The LGU will review submissions, supporting documents, and eligibility under applicable
+        laws, regulations, and municipal requirements. You may be asked to correct or provide additional
+        information or documents, or to complete steps at the LGU office.
+    </p>
+
+    <h2 class="h4 mt-4">Reference codes</h2>
+    <p>
+        A reference code is a credential for viewing and managing the application associated with it; it
+        is not a separate account or proof of identity. Anyone who obtains the code may be able to view
+        application information and submit replacement documents. Keep it private, use it only on this
+        official service, and contact the LGU promptly if you believe it has been exposed.
+    </p>
+
+    <h2 class="h4 mt-4">Service availability and changes</h2>
+    <p>
+        The LGU may update, suspend, or limit online services for maintenance, security, or operational
+        reasons. Online submission does not replace applicable legal requirements or official directions
+        from the LGU.
+    </p>
+
+    <h2 class="h4 mt-4">Privacy and questions</h2>
+    <p>
+        The handling of personal information is described in the
+        <a href="{% url 'core:privacy' %}">Privacy Policy</a>. For questions about these terms or an
+        application, contact or visit the Local Government Unit of Bontoc office.
+    </p>
+</article>
+{% endblock %}

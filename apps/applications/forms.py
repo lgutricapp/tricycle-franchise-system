@@ -48,3 +48,11 @@ class RenewalLookupForm(forms.Form):
         max_length=100,
         help_text="Enter your last name exactly as registered, e.g. Dela Cruz.",
     )
+
+
+class PolicyAcceptanceForm(forms.Form):
+    accepted = forms.BooleanField(
+        required=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        error_messages={"required": "You must agree to the Terms & Conditions and acknowledge the Privacy Policy."},
+    )

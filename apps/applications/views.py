@@ -13,10 +13,10 @@ from apps.documents.services import review_document
 from apps.documents.validators import validate_document_file
 from apps.franchises.models import Franchise
 from apps.notifications.services import notify_applicant
-from .models import Application, StatusHistory
+from .models import Application, CURRENT_POLICY_VERSION, StatusHistory
 from .services import transition_application, InvalidTransition, ALLOWED_TRANSITIONS
 from .services import get_timeline_progress
-from .forms import ApplicantForm, VehicleForm, RenewalLookupForm
+from .forms import ApplicantForm, VehicleForm, RenewalLookupForm, PolicyAcceptanceForm
 from apps.franchises.models import Franchise, FranchiseHolder
 from apps.notifications.message_templates import APPROVED_INSTRUCTIONS_TEMPLATE, submission_message
 from apps.core.names import normalize_name
@@ -37,20 +37,24 @@ def _validate_document_uploads(request, requirements):
     missing_required_docs = []
     file_errors = []
     valid_files = {}
+    document_errors = {}
 
     for req in requirements:
         uploaded_file = request.FILES.get(f"document_{req.id}")
         if not uploaded_file:
             if req.required:
                 missing_required_docs.append(req.name)
+                document_errors[req.id] = "This document is required. Please choose a file."
             continue
         try:
             validate_document_file(uploaded_file)
             valid_files[req.id] = uploaded_file
         except ValidationError as e:
-            file_errors.append(f"{req.name}: {'; '.join(e.messages)}")
+            error = "; ".join(e.messages)
+            file_errors.append(f"{req.name}: {error}")
+            document_errors[req.id] = error
 
-    return missing_required_docs, file_errors, valid_files
+    return missing_required_docs, file_errors, valid_files, document_errors
 
 
 def new_application(request):
@@ -61,10 +65,18 @@ def new_application(request):
     if request.method == "POST":
         applicant_form = ApplicantForm(request.POST)
         vehicle_form = VehicleForm(request.POST)
-        missing_required_docs, file_errors, valid_files = _validate_document_uploads(request, requirements)
+        policy_acceptance_form = PolicyAcceptanceForm(request.POST)
+        missing_required_docs, file_errors, valid_files, document_errors = _validate_document_uploads(request, requirements)
 
-        if applicant_form.is_valid() and vehicle_form.is_valid() and not missing_required_docs and not file_errors:
+        if (
+            applicant_form.is_valid()
+            and vehicle_form.is_valid()
+            and policy_acceptance_form.is_valid()
+            and not missing_required_docs
+            and not file_errors
+        ):
             with transaction.atomic():
+                submitted_at = timezone.now()
                 applicant = applicant_form.save()
                 vehicle = vehicle_form.save()
 
@@ -73,7 +85,9 @@ def new_application(request):
                     vehicle=vehicle,
                     type=Application.ApplicationType.NEW,
                     status=Application.Status.SUBMITTED,
-                    submitted_at=timezone.now(),
+                    submitted_at=submitted_at,
+                    policy_accepted_at=submitted_at,
+                    policy_version_accepted=CURRENT_POLICY_VERSION,
                 )
 
                 StatusHistory.objects.create(
@@ -99,18 +113,31 @@ def new_application(request):
                         )
 
             return redirect("applications:submitted", reference_code=application.reference_code)
+        active_step = (
+            0 if applicant_form.errors
+            else 1 if vehicle_form.errors
+            else 2
+        )
     else:
         applicant_form = ApplicantForm()
         vehicle_form = VehicleForm()
+        policy_acceptance_form = PolicyAcceptanceForm()
         missing_required_docs = []
         file_errors = []
+        document_errors = {}
+        active_step = 0
 
     return render(request, "applications/new_application.html", {
         "applicant_form": applicant_form,
         "vehicle_form": vehicle_form,
+        "policy_acceptance_form": policy_acceptance_form,
         "requirements": requirements,
         "missing_required_docs": missing_required_docs,
         "file_errors": file_errors,
+        "document_errors": document_errors,
+        "active_step": active_step,
+        "active_step_label": ("Applicant Information", "Tricycle Information", "Required Documents")[active_step],
+        "show_validation_feedback": request.method == "POST",
     })
 
 
@@ -164,10 +191,12 @@ def renewal_form(request, franchise_number):
     )
 
     if request.method == "POST":
-        missing_required_docs, file_errors, valid_files = _validate_document_uploads(request, requirements)
+        policy_acceptance_form = PolicyAcceptanceForm(request.POST)
+        missing_required_docs, file_errors, valid_files, document_errors = _validate_document_uploads(request, requirements)
 
-        if not missing_required_docs and not file_errors:
+        if policy_acceptance_form.is_valid() and not missing_required_docs and not file_errors:
             with transaction.atomic():
+                submitted_at = timezone.now()
                 # Snapshot the holder's current info as this renewal's Applicant
                 # record. No edits are accepted here — the holder/vehicle registry
                 # only changes through the LGU office, not a self-service renewal.
@@ -186,7 +215,9 @@ def renewal_form(request, franchise_number):
                     franchise=franchise,
                     type=Application.ApplicationType.RENEWAL,
                     status=Application.Status.SUBMITTED,
-                    submitted_at=timezone.now(),
+                    submitted_at=submitted_at,
+                    policy_accepted_at=submitted_at,
+                    policy_version_accepted=CURRENT_POLICY_VERSION,
                 )
 
                 StatusHistory.objects.create(
@@ -213,14 +244,19 @@ def renewal_form(request, franchise_number):
 
             return redirect("applications:submitted", reference_code=application.reference_code)
     else:
+        policy_acceptance_form = PolicyAcceptanceForm()
         missing_required_docs = []
         file_errors = []
+        document_errors = {}
 
     return render(request, "applications/renewal_form.html", {
         "franchise": franchise,
+        "policy_acceptance_form": policy_acceptance_form,
         "requirements": requirements,
         "missing_required_docs": missing_required_docs,
         "file_errors": file_errors,
+        "document_errors": document_errors,
+        "show_validation_feedback": request.method == "POST",
     })
 
 
@@ -331,8 +367,12 @@ def staff_application_detail(request, reference_code):
             "application": application, "front": front,
         }, status=403)
 
-    if request.method == "GET" and application.status in (
+    if (
+        request.method == "GET"
+        and (request.user.role != User.Role.REVIEWER or request.user.is_superuser)
+        and application.status in (
         Application.Status.SUBMITTED, Application.Status.RESUBMITTED
+        )
     ):
         try:
             claim_application_for_review(application, request.user)

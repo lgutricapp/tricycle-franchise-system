@@ -2,6 +2,7 @@ import secrets
 from django.db import models
 
 REFERENCE_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I — avoids visual ambiguity
+CURRENT_POLICY_VERSION = "2026-10-18"
 
 
 def generate_reference_code(length=10):
@@ -40,6 +41,8 @@ class Application(models.Model):
     type = models.CharField(max_length=10, choices=ApplicationType.choices)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     submitted_at = models.DateTimeField(null=True, blank=True)
+    policy_accepted_at = models.DateTimeField(null=True, blank=True)
+    policy_version_accepted = models.CharField(max_length=20, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

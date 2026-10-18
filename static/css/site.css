@@ -330,6 +330,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   display: inline-block;
 }
 
+.submission-confirmation {
+  max-width: 760px;
+}
+
+.submission-confirmation-title {
+  color: var(--color-accent-dark);
+}
+
+.submission-reminder {
+  max-width: 600px;
+}
+
 /* ============================================
    Responsive
    ============================================ */

@@ -37,12 +37,18 @@
 
 <form method="post" enctype="multipart/form-data" id="renewal-form" novalidate>
     {% csrf_token %}
+    {% if show_validation_feedback %}
+        <div class="alert alert-danger" role="alert" aria-live="polite">
+            We couldn't submit your renewal yet. Review the document messages and the agreement checkbox below, correct them, and submit again.
+            Uploaded files are not retained after a validation error, so please select the documents again.
+        </div>
+    {% endif %}
     <div class="card mb-4">
         <div class="card-header">Required Documents</div>
         <div class="card-body">
             {% if file_errors %}
                 <div class="alert alert-danger">
-                    <strong>Some files couldn't be accepted:</strong>
+                    <strong>Some files couldn't be accepted. Review each message below:</strong>
                     <ul class="mb-0">
                         {% for err in file_errors %}<li>{{ err }}</li>{% endfor %}
                     </ul>
@@ -50,7 +56,7 @@
             {% endif %}
             {% if missing_required_docs %}
                 <div class="alert alert-danger">
-                    Please upload the following required documents: {{ missing_required_docs|join:", " }}
+                    Please upload the following required documents: {{ missing_required_docs|join:", " }}.
                 </div>
             {% endif %}
             {% for req in requirements %}
@@ -62,12 +68,30 @@
                     {% if req.description %}<div class="document-desc">{{ req.description }}</div>{% endif %}
                     <input type="file" name="document_{{ req.id }}" class="form-control" accept=".pdf,.jpg,.jpeg,.png" {% if req.required %}data-required="true"{% endif %}>
                     <div class="invalid-feedback">Please select a file for this required document.</div>
+                    {% for requirement_id, error in document_errors.items %}
+                        {% if requirement_id == req.id %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endif %}
+                    {% endfor %}
                     <div class="file-chosen-name"></div>
                 </div>
             {% empty %}
                 <p class="text-muted">No renewal document requirements have been configured yet.</p>
             {% endfor %}
         </div>
+    </div>
+    <p class="small text-muted mt-3">
+        By submitting, you confirm that the information and documents you provide are accurate.
+    </p>
+    <div class="form-check mb-3">
+        {{ policy_acceptance_form.accepted }}
+        <label class="form-check-label" for="{{ policy_acceptance_form.accepted.id_for_label }}">
+            I have read and agree to the <a href="{% url 'core:terms' %}" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+            and acknowledge the <a href="{% url 'core:privacy' %}" target="_blank" rel="noopener">Privacy Policy</a>.
+        </label>
+        {% if policy_acceptance_form.accepted.errors %}
+            <div class="text-danger small" id="policy-acceptance-error">{{ policy_acceptance_form.accepted.errors }}</div>
+        {% endif %}
     </div>
     <button type="submit" class="btn btn-primary btn-lg">Submit Renewal</button>
 </form>

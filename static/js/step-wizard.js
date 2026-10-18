@@ -4,7 +4,7 @@ function initStepWizard(formSelector) {
 
   const panels = Array.from(form.querySelectorAll(".form-step-panel"));
   const indicatorItems = Array.from(form.querySelectorAll(".step-indicator li"));
-  let currentStep = 0;
+  let currentStep = Number.parseInt(form.dataset.initialStep || "0", 10);
 
   function showStep(index) {
     panels.forEach((panel, i) => panel.classList.toggle("is-active", i === index));
@@ -18,45 +18,70 @@ function initStepWizard(formSelector) {
 
   function markInvalid(field) {
     field.classList.add("is-invalid");
+    field.setAttribute("aria-invalid", "true");
   }
 
   function clearInvalid(field) {
     field.classList.remove("is-invalid");
+    field.removeAttribute("aria-invalid");
+    const feedback = field.nextElementSibling;
+    if (feedback && feedback.classList.contains("invalid-feedback")) {
+      feedback.classList.remove("d-block");
+    }
+  }
+
+  function showFieldError(field, message) {
+    markInvalid(field);
+    let feedback = field.nextElementSibling;
+    if (!feedback || !feedback.classList.contains("invalid-feedback")) {
+      feedback = document.createElement("div");
+      feedback.className = "invalid-feedback";
+      field.insertAdjacentElement("afterend", feedback);
+    }
+    feedback.textContent = message;
+    feedback.classList.add("d-block");
+  }
+
+  function getFieldError(field, invalidFile, invalidCheckbox, invalidValue) {
+    if (invalidFile) return "Please select a file for this required document.";
+    if (invalidCheckbox) return "Please check this box to continue.";
+    if (invalidValue) {
+      const label = field.labels && field.labels.length
+        ? field.labels[0].textContent.trim().replace(/\s*\*\s*$/, "")
+        : "";
+      return `${label || "This field"} is required.`;
+    }
+    return field.validationMessage || "Please enter a valid value.";
   }
 
   function validateStep(index) {
     const panel = panels[index];
     let firstInvalid = null;
 
-    panel.querySelectorAll("input[required], select[required], textarea[required]").forEach((field) => {
-      if (!field.value.trim()) {
-        markInvalid(field);
+    panel.querySelectorAll("input, select, textarea").forEach((field) => {
+      const invalidFile = field.matches("input[type=file][data-required=true]") && !field.files.length;
+      const invalidCheckbox = field.type === "checkbox" && field.required && !field.checked;
+      const invalidValue = field.required && !field.value.trim();
+      const invalidFormat = field.willValidate && !field.checkValidity();
+
+      if (invalidFile || invalidCheckbox || invalidValue || invalidFormat) {
+        showFieldError(field, getFieldError(field, invalidFile, invalidCheckbox, invalidValue));
         if (!firstInvalid) firstInvalid = field;
       } else {
         clearInvalid(field);
       }
     });
 
-    panel.querySelectorAll("input[type=file][data-required=true]").forEach((field) => {
-      if (!field.files.length) {
-        markInvalid(field);
-        if (!firstInvalid) firstInvalid = field;
-      } else {
-        clearInvalid(field);
-      }
-    });
-
-    if (firstInvalid) {
-      firstInvalid.focus();
-      return false;
-    }
-    return true;
+    return firstInvalid;
   }
 
   form.querySelectorAll(".btn-step-next").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (validateStep(currentStep)) {
+      const firstInvalid = validateStep(currentStep);
+      if (!firstInvalid) {
         showStep(currentStep + 1);
+      } else {
+        firstInvalid.focus();
       }
     });
   });
@@ -68,6 +93,7 @@ function initStepWizard(formSelector) {
   // Clear the invalid state on a field as soon as the person starts fixing it.
   form.querySelectorAll("input, select, textarea").forEach((field) => {
     field.addEventListener("input", () => clearInvalid(field));
+    field.addEventListener("change", () => clearInvalid(field));
   });
 
   // Show the chosen filename and highlight the row once a file is selected.
@@ -91,13 +117,15 @@ function initStepWizard(formSelector) {
   // step, goes back, and leaves an earlier one incomplete.
   form.addEventListener("submit", (event) => {
     for (let i = 0; i < panels.length; i++) {
-      if (!validateStep(i)) {
+      const firstInvalid = validateStep(i);
+      if (firstInvalid) {
         showStep(i);
+        firstInvalid.focus();
         event.preventDefault();
         return;
       }
     }
   });
 
-  showStep(0);
+  showStep(Math.min(Math.max(currentStep, 0), panels.length - 1));
 }

@@ -20,6 +20,15 @@ from .services import get_monthly_applications_data, get_available_chart_years
 def home(request):
     return render(request, "core/home.html")
 
+
+def terms(request):
+    return render(request, "core/terms.html")
+
+
+def privacy(request):
+    return render(request, "core/privacy.html")
+
+
 def ratelimited_view(request, exception=None):
     return render(request, "core/ratelimited.html", status=429)
 
