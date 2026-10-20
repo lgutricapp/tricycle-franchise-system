@@ -83,7 +83,10 @@ def report_index(request):
         "status": status,
         "validation_error": validation_error,
         "report_type_choices": REPORT_TYPE_CHOICES,
-        "application_status_choices": Application.Status.choices,
+        "application_status_choices": [
+            choice for choice in Application.Status.choices
+            if choice[0] != Application.Status.DRAFT
+        ],
         "franchise_status_choices": Franchise.Status.choices,
         "report_data": report_data,
         "query_string": query_string,

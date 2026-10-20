@@ -49,6 +49,7 @@ class ReportAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Report Generation")
         self.assertContains(response, "Report Filters")
+        self.assertNotContains(response, 'value="DRAFT"')
 
     def test_super_admin_can_access(self):
         self.client.login(username="super_admin", password="password123")
