@@ -128,6 +128,48 @@ class ApplicationTransitionTests(TestCase):
         renewal.refresh_from_db()
         self.assertEqual(renewal.status, Application.Status.UNDER_REVIEW)
 
+    def test_lookup_blocks_franchise_with_unsettled_violation(self):
+        holder = FranchiseHolder.objects.create(
+            first_name="Maria", last_name="Santos", address="Baguio City", contact_number="09171234567"
+        )
+        franchise = Franchise.objects.create(
+            franchise_number="TRI-2026-00101", holder=holder, vehicle=self.vehicle,
+            date_issued=date(2025, 1, 1), expiration_date=date(2026, 1, 1),
+        )
+        Violation.objects.create(
+            franchise=franchise, violation_type="Unsettled fine", date=date(2026, 1, 1),
+        )
+
+        response = self.client.post(reverse("applications:renewal_lookup"), {
+            "franchise_number": franchise.franchise_number,
+            "last_name_confirm": "Santos",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "cannot be renewed until they are settled")
+
+    def test_direct_renewal_url_blocks_get_and_post_with_unsettled_violation(self):
+        holder = FranchiseHolder.objects.create(
+            first_name="Maria", last_name="Santos", address="Baguio City", contact_number="09171234567"
+        )
+        franchise = Franchise.objects.create(
+            franchise_number="TRI-2026-00102", holder=holder, vehicle=self.vehicle,
+            date_issued=date(2025, 1, 1), expiration_date=date(2026, 1, 1),
+        )
+        Violation.objects.create(
+            franchise=franchise, violation_type="Unsettled fine", date=date(2026, 1, 1),
+        )
+        renewal_url = reverse("applications:renewal_form", args=[franchise.franchise_number])
+
+        get_response = self.client.get(renewal_url)
+        post_response = self.client.post(renewal_url, {"accepted": "on"})
+
+        self.assertEqual(get_response.status_code, 200)
+        self.assertContains(get_response, "cannot be renewed until they are settled")
+        self.assertEqual(post_response.status_code, 200)
+        self.assertContains(post_response, "cannot be renewed until they are settled")
+        self.assertFalse(Application.objects.filter(franchise=franchise).exists())
+
 class VehicleFormTests(TestCase):
     def setUp(self):
         Vehicle.objects.create(
