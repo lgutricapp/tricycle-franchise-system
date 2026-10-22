@@ -25,7 +25,12 @@ from .services import (
     get_queue_front, is_queue_front, claim_application_for_review, QueueLocked,
     BLOCKING_QUEUE_STATUSES, QUEUE_DISPLAY_STATUSES, get_timeline_progress,
     FranchiseNumberError, validate_franchise_number, register_franchise,
-    get_allowed_transitions,
+    get_allowed_transitions, franchise_has_unsettled_violations,
+)
+
+UNSETTLED_VIOLATION_ERROR = (
+    "This franchise has unsettled violations and cannot be renewed until they are settled. "
+    "Please visit the LGU office to settle outstanding violations first."
 )
 
 def _validate_document_uploads(request, requirements):
@@ -163,16 +168,8 @@ def renewal_lookup(request):
             franchise = None
 
         if franchise and normalize_name(last_name) == normalize_name(franchise.holder.last_name):
-            from apps.core.models import SystemConfiguration
-            from apps.violations.models import Violation
-
-            config = SystemConfiguration.get()
-            has_unsettled = franchise.violations.filter(status=Violation.Status.UNSETTLED).exists()
-            if config.block_renewal_on_unsettled_violations and has_unsettled:
-                error = (
-                    "This franchise has unsettled violations and cannot be renewed online. "
-                    "Please visit the LGU office to settle outstanding violations first."
-                )
+            if franchise_has_unsettled_violations(franchise):
+                error = UNSETTLED_VIOLATION_ERROR
                 return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
             return redirect("applications:renewal_form", franchise_number=franchise.franchise_number)
 
@@ -185,6 +182,12 @@ def renewal_form(request, franchise_number):
     franchise = get_object_or_404(
         Franchise.objects.select_related("holder", "vehicle"), franchise_number=franchise_number
     )
+    if franchise_has_unsettled_violations(franchise):
+        return render(request, "applications/renewal_lookup.html", {
+            "form": RenewalLookupForm(),
+            "error": UNSETTLED_VIOLATION_ERROR,
+        })
+
     requirements = DocumentRequirement.objects.filter(
         active=True,
         application_type__in=[DocumentRequirement.ApplicationType.RENEWAL, DocumentRequirement.ApplicationType.BOTH],

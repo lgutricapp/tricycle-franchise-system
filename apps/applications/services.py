@@ -55,6 +55,12 @@ class FranchiseNumberError(Exception):
     pass
 
 
+def franchise_has_unsettled_violations(franchise):
+    from apps.violations.models import Violation
+
+    return franchise.violations.filter(status=Violation.Status.UNSETTLED).exists()
+
+
 def _one_year_from(day):
     try:
         return day.replace(year=day.year + 1)
@@ -77,6 +83,13 @@ def get_allowed_transitions(application):
 
 
 def transition_application(application, new_status, actor, remarks="", notify=True):
+    if (
+        new_status == Application.Status.APPROVED
+        and application.type == Application.ApplicationType.RENEWAL
+        and franchise_has_unsettled_violations(application.franchise)
+    ):
+        raise InvalidTransition("A renewal cannot be approved while the franchise has unsettled violations.")
+
     allowed = get_allowed_transitions(application)
     if new_status not in allowed:
         raise InvalidTransition(

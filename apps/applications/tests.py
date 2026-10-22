@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from apps.applicants.models import Applicant
 from apps.franchises.models import Vehicle, FranchiseHolder, Franchise
+from apps.violations.models import Violation
 from .models import Application
 from .services import transition_application, register_franchise, InvalidTransition
 from .forms import PolicyAcceptanceForm, VehicleForm
@@ -104,6 +105,28 @@ class ApplicationTransitionTests(TestCase):
         self.assertGreater(franchise.expiration_date, old_expiration)
         renewal.refresh_from_db()
         self.assertEqual(renewal.status, Application.Status.COMPLETED)
+
+    def test_renewal_cannot_be_approved_with_unsettled_violation(self):
+        holder = FranchiseHolder.objects.create(
+            full_name="Maria Santos", address="Baguio City", contact_number="09171234567"
+        )
+        franchise = Franchise.objects.create(
+            franchise_number="TRI-2026-00100", holder=holder, vehicle=self.vehicle,
+            date_issued=date(2025, 1, 1), expiration_date=date(2026, 1, 1),
+        )
+        renewal = Application.objects.create(
+            applicant=self.applicant, vehicle=self.vehicle, franchise=franchise,
+            type=Application.ApplicationType.RENEWAL, status=Application.Status.UNDER_REVIEW,
+        )
+        Violation.objects.create(
+            franchise=franchise, violation_type="Unsettled fine", date=date(2026, 1, 1),
+        )
+
+        with self.assertRaises(InvalidTransition):
+            transition_application(renewal, Application.Status.APPROVED, self.staff)
+
+        renewal.refresh_from_db()
+        self.assertEqual(renewal.status, Application.Status.UNDER_REVIEW)
 
 class VehicleFormTests(TestCase):
     def setUp(self):
