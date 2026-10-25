@@ -103,6 +103,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/personal-information-validation.js' %}"></script>
 <script src="{% static 'js/simple-form-validate.js' %}"></script>
+<script>initPersonalInformationValidation("#manual-franchise-form");</script>
 <script>initSimpleFormValidation("#manual-franchise-form");</script>
 {% endblock %}

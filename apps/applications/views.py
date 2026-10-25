@@ -1,9 +1,11 @@
 from django.contrib import messages
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from django_ratelimit.decorators import ratelimit
 from apps.accounts.decorators import role_required
 from apps.accounts.models import User
@@ -16,7 +18,7 @@ from apps.notifications.services import notify_applicant
 from .models import Application, CURRENT_POLICY_VERSION, StatusHistory
 from .services import transition_application, InvalidTransition, ALLOWED_TRANSITIONS
 from .services import get_timeline_progress
-from .forms import ApplicantForm, VehicleForm, RenewalLookupForm, PolicyAcceptanceForm
+from .forms import ApplicantForm, VehicleForm, RenewalLookupForm, RenewalOTPForm, PolicyAcceptanceForm
 from apps.franchises.models import Franchise, FranchiseHolder
 from apps.notifications.message_templates import APPROVED_INSTRUCTIONS_TEMPLATE, submission_message
 from apps.core.names import normalize_name
@@ -32,6 +34,28 @@ UNSETTLED_VIOLATION_ERROR = (
     "This franchise has unsettled violations and cannot be renewed until they are settled. "
     "Please visit the LGU office to settle outstanding violations first."
 )
+RENEWAL_OTP_SESSION_KEY = "renewal_otp_challenge"
+RENEWAL_VERIFIED_SESSION_KEY = "renewal_verified"
+RENEWAL_OTP_TTL_SECONDS = 5 * 60
+RENEWAL_VERIFIED_TTL_SECONDS = 15 * 60
+RENEWAL_OTP_MAX_ATTEMPTS = 5
+RENEWAL_OTP_RESEND_WAIT_SECONDS = 60
+
+
+def _masked_phone_number(number):
+    digits = "".join(character for character in number if character.isdigit())
+    return f"{'*' * max(len(digits) - 2, 0)}{digits[-2:]}"
+
+
+def _has_renewal_verification(request, franchise):
+    verification = request.session.get(RENEWAL_VERIFIED_SESSION_KEY, {})
+    if (
+        verification.get("franchise_id") != franchise.pk
+        or verification.get("expires_at", 0) <= timezone.now().timestamp()
+    ):
+        request.session.pop(RENEWAL_VERIFIED_SESSION_KEY, None)
+        return False
+    return True
 
 def _validate_document_uploads(request, requirements):
     """
@@ -151,7 +175,7 @@ def application_submitted(request, reference_code):
     return render(request, "applications/application_submitted.html", {"application": application})
 
 
-@ratelimit(key="ip", rate="10/m", block=True)
+@ratelimit(key="ip", rate="3/10m", method="POST", block=True)
 def renewal_lookup(request):
     form = RenewalLookupForm(request.POST or None)
     error = None
@@ -171,11 +195,84 @@ def renewal_lookup(request):
             if franchise_has_unsettled_violations(franchise):
                 error = UNSETTLED_VIOLATION_ERROR
                 return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
-            return redirect("applications:renewal_form", franchise_number=franchise.franchise_number)
+            now = timezone.now().timestamp()
+            last_sent_at = request.session.get("renewal_otp_last_sent_at", 0)
+            if now - last_sent_at < RENEWAL_OTP_RESEND_WAIT_SECONDS:
+                error = "Please wait before requesting another verification code."
+                return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
+            if not franchise.holder.contact_number:
+                error = "There is no phone number on file for this franchise. Please contact the LGU office."
+                return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
+
+            from apps.notifications.services import deliver_sms
+
+            code = get_random_string(6, allowed_chars="0123456789")
+            delivery = deliver_sms(
+                franchise.holder.contact_number,
+                f"Your tricycle franchise renewal verification code is {code}. "
+                "It expires in 5 minutes. Do not share this code.",
+            )
+            if not delivery.get("success"):
+                error = "We couldn't send a verification code right now. Please try again later."
+                return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
+
+            request.session[RENEWAL_OTP_SESSION_KEY] = {
+                "franchise_id": franchise.pk,
+                "code_hash": make_password(code),
+                "expires_at": now + RENEWAL_OTP_TTL_SECONDS,
+                "attempts": 0,
+            }
+            request.session["renewal_otp_last_sent_at"] = now
+            request.session.pop(RENEWAL_VERIFIED_SESSION_KEY, None)
+            return redirect("applications:renewal_verify")
 
         error = "We couldn't find a matching franchise record. Please check the franchise number and last name."
 
     return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
+
+
+@ratelimit(key="ip", rate="5/m", method="POST", block=True)
+def renewal_verify(request):
+    challenge = request.session.get(RENEWAL_OTP_SESSION_KEY)
+    now = timezone.now().timestamp()
+    if not challenge:
+        messages.error(request, "Request a verification code before continuing.")
+        return redirect("applications:renewal_lookup")
+
+    if challenge.get("expires_at", 0) <= now or challenge.get("attempts", 0) >= RENEWAL_OTP_MAX_ATTEMPTS:
+        request.session.pop(RENEWAL_OTP_SESSION_KEY, None)
+        request.session.pop("renewal_otp_last_sent_at", None)
+        messages.error(request, "Your verification code has expired or too many attempts were made. Please start again.")
+        return redirect("applications:renewal_lookup")
+
+    form = RenewalOTPForm(request.POST or None)
+    error = None
+    if request.method == "POST":
+        if form.is_valid() and check_password(form.cleaned_data["code"], challenge["code_hash"]):
+            request.session[RENEWAL_VERIFIED_SESSION_KEY] = {
+                "franchise_id": challenge["franchise_id"],
+                "expires_at": now + RENEWAL_VERIFIED_TTL_SECONDS,
+            }
+            request.session.pop(RENEWAL_OTP_SESSION_KEY, None)
+            request.session.pop("renewal_otp_last_sent_at", None)
+            request.session.cycle_key()
+            franchise = get_object_or_404(Franchise, pk=challenge["franchise_id"])
+            return redirect("applications:renewal_form", franchise_number=franchise.franchise_number)
+
+        challenge["attempts"] += 1
+        request.session[RENEWAL_OTP_SESSION_KEY] = challenge
+        error = (
+            "Invalid verification code. Your code has been invalidated after five failed attempts."
+            if challenge["attempts"] >= RENEWAL_OTP_MAX_ATTEMPTS
+            else "Invalid verification code. Please try again."
+        )
+
+    franchise = get_object_or_404(Franchise, pk=challenge["franchise_id"])
+    return render(request, "applications/renewal_verify.html", {
+        "form": form,
+        "error": error,
+        "masked_phone_number": _masked_phone_number(franchise.holder.contact_number),
+    })
 
 
 def renewal_form(request, franchise_number):
@@ -187,6 +284,9 @@ def renewal_form(request, franchise_number):
             "form": RenewalLookupForm(),
             "error": UNSETTLED_VIOLATION_ERROR,
         })
+    if not _has_renewal_verification(request, franchise):
+        messages.error(request, "Verify the code sent to the franchise owner's phone before renewing.")
+        return redirect("applications:renewal_lookup")
 
     requirements = DocumentRequirement.objects.filter(
         active=True,
@@ -245,6 +345,7 @@ def renewal_form(request, franchise_number):
                             uploaded_file=valid_files[req.id],
                         )
 
+            request.session.pop(RENEWAL_VERIFIED_SESSION_KEY, None)
             return redirect("applications:submitted", reference_code=application.reference_code)
     else:
         policy_acceptance_form = PolicyAcceptanceForm()

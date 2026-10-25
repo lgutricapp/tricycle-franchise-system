@@ -1,9 +1,38 @@
 from django import forms
 
+from apps.core.validators import CONTACT_NUMBER_VALIDATOR, NAME_VALIDATOR
 from .models import Franchise, FranchiseHolder
 
 
 class ManualHolderForm(forms.ModelForm):
+    first_name = forms.CharField(
+        max_length=100,
+        validators=[NAME_VALIDATOR],
+        widget=forms.TextInput(attrs={"data-name-input": "true", "title": "Use letters and spaces only."}),
+    )
+    middle_name = forms.CharField(
+        max_length=100,
+        required=False,
+        validators=[NAME_VALIDATOR],
+        widget=forms.TextInput(attrs={"data-name-input": "true", "title": "Use letters and spaces only."}),
+    )
+    last_name = forms.CharField(
+        max_length=100,
+        validators=[NAME_VALIDATOR],
+        widget=forms.TextInput(attrs={"data-name-input": "true", "title": "Use letters and spaces only."}),
+    )
+    contact_number = forms.CharField(
+        max_length=11,
+        validators=[CONTACT_NUMBER_VALIDATOR],
+        widget=forms.TextInput(attrs={
+            "inputmode": "numeric",
+            "maxlength": "11",
+            "pattern": "[0-9]{11}",
+            "data-contact-number": "true",
+            "title": "Enter an 11-digit contact number using numbers only.",
+        }),
+    )
+
     class Meta:
         model = FranchiseHolder
         fields = ["first_name", "middle_name", "last_name", "address", "contact_number", "email"]

@@ -83,6 +83,13 @@ def get_allowed_transitions(application):
 
 
 def transition_application(application, new_status, actor, remarks="", notify=True):
+    if application.status == new_status or (
+        new_status == Application.Status.APPROVED
+        and application.type == Application.ApplicationType.RENEWAL
+        and application.status == Application.Status.COMPLETED
+    ):
+        return application
+
     if (
         new_status == Application.Status.APPROVED
         and application.type == Application.ApplicationType.RENEWAL

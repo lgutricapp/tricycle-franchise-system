@@ -6,10 +6,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def send_sms(to_number, message, sent_by=None, application=None, franchise=None):
+
+def deliver_sms(to_number, message):
+    """Deliver an SMS without retaining its contents in notification history."""
     backend_class = import_string(settings.SMS_BACKEND)
     backend = backend_class()
-    result = backend.send(to_number, message)
+    return backend.send(to_number, message)
+
+
+def send_sms(to_number, message, sent_by=None, application=None, franchise=None):
+    result = deliver_sms(to_number, message)
 
     return Notification.objects.create(
         channel=Notification.Channel.SMS,

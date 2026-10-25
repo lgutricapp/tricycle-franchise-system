@@ -117,6 +117,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/personal-information-validation.js' %}"></script>
 <script src="{% static 'js/step-wizard.js' %}"></script>
+<script>initPersonalInformationValidation("#new-application-form");</script>
 <script>initStepWizard("#new-application-form");</script>
 {% endblock %}

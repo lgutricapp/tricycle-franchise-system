@@ -1,15 +1,48 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
+from django.core.cache import cache
+from unittest.mock import patch
 from apps.applicants.models import Applicant
 from apps.franchises.models import Vehicle, FranchiseHolder, Franchise
+from apps.notifications.models import Notification
 from apps.violations.models import Violation
 from .models import Application
 from .services import transition_application, register_franchise, InvalidTransition
-from .forms import PolicyAcceptanceForm, VehicleForm
+from .forms import ApplicantForm, PolicyAcceptanceForm, VehicleForm
 from datetime import date
 
 User = get_user_model()
+
+
+class ApplicantFormValidationTests(TestCase):
+    def setUp(self):
+        self.data = {
+            "first_name": "Alex",
+            "middle_name": "",
+            "last_name": "Applicant",
+            "address": "Bontoc",
+            "contact_number": "09171234567",
+            "email": "",
+        }
+
+    def test_accepts_letters_and_spaces_in_names(self):
+        self.data.update(first_name="De La", middle_name="José", last_name="Cruz")
+        self.assertTrue(ApplicantForm(data=self.data).is_valid())
+
+    def test_rejects_numbers_and_symbols_in_names(self):
+        for name in ("first_name", "middle_name", "last_name"):
+            for invalid_value in ("Alex2", "Alex!"):
+                with self.subTest(name=name, value=invalid_value):
+                    data = {**self.data, name: invalid_value}
+                    self.assertIn(name, ApplicantForm(data=data).errors)
+
+    def test_requires_exactly_eleven_ascii_digits_for_contact_number(self):
+        for invalid_number in ("1234567890", "091712345678", "09171ABC567"):
+            with self.subTest(number=invalid_number):
+                data = {**self.data, "contact_number": invalid_number}
+                self.assertIn("contact_number", ApplicantForm(data=data).errors)
 
 
 class ReferenceCodeTests(TestCase):
@@ -38,6 +71,7 @@ class ReferenceCodeTests(TestCase):
 
 class ApplicationTransitionTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.applicant = Applicant.objects.create(
             full_name="Maria Santos", address="Baguio City", contact_number="09171234567"
         )
@@ -62,6 +96,43 @@ class ApplicationTransitionTests(TestCase):
         self.assertEqual(latest.status, Application.Status.UNDER_REVIEW)
         self.assertEqual(latest.remarks, "Looks complete")
         self.assertEqual(latest.changed_by, self.staff)
+
+    def test_repeating_revision_required_transition_is_idempotent(self):
+        transition_application(self.application, Application.Status.UNDER_REVIEW, self.staff)
+        transition_application(self.application, Application.Status.REVISION_REQUIRED, self.staff)
+        history_count = self.application.status_history.count()
+
+        transition_application(self.application, Application.Status.REVISION_REQUIRED, self.staff)
+
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.REVISION_REQUIRED)
+        self.assertEqual(self.application.status_history.count(), history_count)
+
+    def test_repeating_approved_transition_is_idempotent(self):
+        transition_application(self.application, Application.Status.UNDER_REVIEW, self.staff)
+        transition_application(self.application, Application.Status.APPROVED, self.staff, notify=False)
+        history_count = self.application.status_history.count()
+
+        transition_application(self.application, Application.Status.APPROVED, self.staff, notify=False)
+
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.APPROVED)
+        self.assertEqual(self.application.status_history.count(), history_count)
+
+    def test_repeating_rejected_transition_is_idempotent(self):
+        transition_application(self.application, Application.Status.UNDER_REVIEW, self.staff)
+        transition_application(
+            self.application, Application.Status.REJECTED, self.staff, remarks="Incomplete", notify=False
+        )
+        history_count = self.application.status_history.count()
+
+        transition_application(
+            self.application, Application.Status.REJECTED, self.staff, remarks="Incomplete", notify=False
+        )
+
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.REJECTED)
+        self.assertEqual(self.application.status_history.count(), history_count)
 
     def test_invalid_transition_is_rejected(self):
         # SUBMITTED -> APPROVED is not an allowed direct jump
@@ -105,6 +176,31 @@ class ApplicationTransitionTests(TestCase):
         self.assertGreater(franchise.expiration_date, old_expiration)
         renewal.refresh_from_db()
         self.assertEqual(renewal.status, Application.Status.COMPLETED)
+
+    def test_repeating_renewal_approval_after_completion_is_idempotent(self):
+        holder = FranchiseHolder.objects.create(
+            full_name="Maria Santos", address="Baguio City", contact_number="09171234567"
+        )
+        franchise = Franchise.objects.create(
+            franchise_number="TRI-2026-00098", holder=holder, vehicle=self.vehicle,
+            date_issued=date(2025, 1, 1), expiration_date=date(2026, 1, 1),
+        )
+        renewal = Application.objects.create(
+            applicant=self.applicant, vehicle=self.vehicle, franchise=franchise,
+            type=Application.ApplicationType.RENEWAL, status=Application.Status.UNDER_REVIEW,
+        )
+        transition_application(renewal, Application.Status.APPROVED, self.staff, notify=False)
+        franchise.refresh_from_db()
+        expiration_after_approval = franchise.expiration_date
+        history_count = renewal.status_history.count()
+
+        transition_application(renewal, Application.Status.APPROVED, self.staff, notify=False)
+
+        franchise.refresh_from_db()
+        renewal.refresh_from_db()
+        self.assertEqual(renewal.status, Application.Status.COMPLETED)
+        self.assertEqual(franchise.expiration_date, expiration_after_approval)
+        self.assertEqual(renewal.status_history.count(), history_count)
 
     def test_renewal_cannot_be_approved_with_unsettled_violation(self):
         holder = FranchiseHolder.objects.create(
@@ -169,6 +265,130 @@ class ApplicationTransitionTests(TestCase):
         self.assertEqual(post_response.status_code, 200)
         self.assertContains(post_response, "cannot be renewed until they are settled")
         self.assertFalse(Application.objects.filter(franchise=franchise).exists())
+
+class RenewalOTPTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.holder = FranchiseHolder.objects.create(
+            first_name="Maria",
+            last_name="Santos",
+            address="Baguio City",
+            contact_number="09171234567",
+        )
+        self.vehicle = Vehicle.objects.create(
+            plate_number="OTP-1234",
+            engine_number="OTP-ENG",
+            chassis_number="OTP-CHS",
+            make="Honda",
+            model="TMX",
+            color="Red",
+        )
+        self.franchise = Franchise.objects.create(
+            franchise_number="TRI-OTP-001",
+            holder=self.holder,
+            vehicle=self.vehicle,
+            date_issued=date(2025, 1, 1),
+            expiration_date=date(2027, 1, 1),
+        )
+        self.lookup_url = reverse("applications:renewal_lookup")
+        self.verify_url = reverse("applications:renewal_verify")
+        self.renewal_url = reverse(
+            "applications:renewal_form", args=[self.franchise.franchise_number]
+        )
+
+    def test_correct_lookup_sends_otp_and_verification_grants_renewal_access(self):
+        with patch("apps.notifications.services.deliver_sms", return_value={"success": True}) as send_sms:
+            lookup_response = self.client.post(self.lookup_url, {
+                "franchise_number": self.franchise.franchise_number,
+                "last_name_confirm": "Santos",
+            })
+
+        self.assertRedirects(lookup_response, self.verify_url)
+        self.assertEqual(send_sms.call_args.args[0], self.holder.contact_number)
+        code = send_sms.call_args.args[1].split("code is ", 1)[1].split(".", 1)[0]
+        self.assertEqual(len(code), 6)
+        self.assertFalse(Notification.objects.filter(message__contains=code).exists())
+
+        verify_response = self.client.post(self.verify_url, {"code": code})
+        self.assertRedirects(verify_response, self.renewal_url)
+
+        renewal_response = self.client.get(self.renewal_url)
+        self.assertEqual(renewal_response.status_code, 200)
+        self.assertContains(renewal_response, "Submit Renewal")
+
+    def test_direct_renewal_access_requires_otp(self):
+        response = self.client.get(self.renewal_url)
+        self.assertRedirects(response, self.lookup_url)
+
+    def test_otp_verification_is_bound_to_its_franchise(self):
+        with patch("apps.notifications.services.deliver_sms", return_value={"success": True}):
+            self.client.post(self.lookup_url, {
+                "franchise_number": self.franchise.franchise_number,
+                "last_name_confirm": "Santos",
+            })
+
+        session = self.client.session
+        challenge = session["renewal_otp_challenge"]
+        session["renewal_otp_challenge"] = {
+            **challenge,
+            "code_hash": make_password("123456"),
+        }
+        session.save()
+        self.client.post(self.verify_url, {"code": "123456"})
+
+        other_holder = FranchiseHolder.objects.create(
+            first_name="Ana",
+            last_name="Reyes",
+            address="Baguio City",
+            contact_number="09179999999",
+        )
+        other_vehicle = Vehicle.objects.create(
+            plate_number="OTP-5678",
+            engine_number="OTP-ENG-2",
+            chassis_number="OTP-CHS-2",
+            make="Honda",
+            model="TMX",
+            color="Blue",
+        )
+        other_franchise = Franchise.objects.create(
+            franchise_number="TRI-OTP-002",
+            holder=other_holder,
+            vehicle=other_vehicle,
+            date_issued=date(2025, 1, 1),
+            expiration_date=date(2027, 1, 1),
+        )
+        other_renewal_url = reverse(
+            "applications:renewal_form", args=[other_franchise.franchise_number]
+        )
+
+        self.assertRedirects(self.client.get(other_renewal_url), self.lookup_url)
+
+    def test_invalid_otp_does_not_grant_access(self):
+        with (
+            patch("apps.notifications.services.deliver_sms", return_value={"success": True}),
+            patch("django.utils.crypto.get_random_string", return_value="123456"),
+        ):
+            self.client.post(self.lookup_url, {
+                "franchise_number": self.franchise.franchise_number,
+                "last_name_confirm": "Santos",
+            })
+
+        response = self.client.post(self.verify_url, {"code": "000000"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid verification code")
+        self.assertRedirects(self.client.get(self.renewal_url), self.lookup_url)
+
+    def test_failed_sms_delivery_does_not_grant_renewal_access(self):
+        with patch("apps.notifications.services.deliver_sms", return_value={"success": False}):
+            response = self.client.post(self.lookup_url, {
+                "franchise_number": self.franchise.franchise_number,
+                "last_name_confirm": "Santos",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "verification code right now")
+        self.assertRedirects(self.client.get(self.renewal_url), self.lookup_url)
+
 
 class VehicleFormTests(TestCase):
     def setUp(self):
