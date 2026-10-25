@@ -1,17 +1,21 @@
-from django.test import TestCase
+import tempfile
+from datetime import date
+from unittest.mock import patch
+
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
-from django.core.cache import cache
-from unittest.mock import patch
 from apps.applicants.models import Applicant
+from apps.documents.models import DocumentRequirement
 from apps.franchises.models import Vehicle, FranchiseHolder, Franchise
 from apps.notifications.models import Notification
 from apps.violations.models import Violation
 from .models import Application
 from .services import transition_application, register_franchise, InvalidTransition
 from .forms import ApplicantForm, PolicyAcceptanceForm, VehicleForm
-from datetime import date
 
 User = get_user_model()
 
@@ -478,7 +482,7 @@ class ApplicationValidationFeedbackTests(TestCase):
         self.assertEqual(Application.objects.count(), 0)
 
     def test_valid_submission_records_policy_acceptance(self):
-        response = self.client.post(reverse("applications:new"), {
+        data = {
             "first_name": "Alex",
             "middle_name": "",
             "last_name": "Applicant",
@@ -492,12 +496,30 @@ class ApplicationValidationFeedbackTests(TestCase):
             "model": "TMX",
             "color": "Red",
             "accepted": "on",
-        })
+        }
+        requirements = DocumentRequirement.objects.filter(
+            active=True,
+            required=True,
+            application_type__in=[
+                DocumentRequirement.ApplicationType.NEW,
+                DocumentRequirement.ApplicationType.BOTH,
+            ],
+        )
+        for requirement in requirements:
+            data[f"document_{requirement.id}"] = SimpleUploadedFile(
+                f"document-{requirement.id}.pdf",
+                b"%PDF-1.4 test document",
+                content_type="application/pdf",
+            )
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = self.client.post(reverse("applications:new"), data)
 
         self.assertEqual(response.status_code, 302)
         application = Application.objects.get()
         self.assertIsNotNone(application.policy_accepted_at)
         self.assertEqual(application.policy_version_accepted, "2026-10-18")
+        self.assertEqual(application.documents.count(), requirements.count())
 
 
 class SubmissionConfirmationTests(TestCase):
