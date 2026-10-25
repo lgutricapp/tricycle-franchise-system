@@ -61,11 +61,43 @@ def _report_results(request, results, recipient_name):
     if not results:
         messages.error(request, f"{recipient_name} has no contact number or email on file.")
         return False
-    if any(r.delivery_status == Notification.DeliveryStatus.FAILED for r in results):
-        messages.warning(request, f"The message to {recipient_name} could not be delivered on every channel. See the notification history.")
+
+    def channel_names(notifications):
+        channels = []
+        for notification in notifications:
+            name = "SMS" if notification.channel == Notification.Channel.SMS else "email"
+            if name not in channels:
+                channels.append(name)
+        return " and ".join(channels)
+
+    delivered = [
+        result for result in results
+        if result.delivery_status in (
+            Notification.DeliveryStatus.SENT,
+            Notification.DeliveryStatus.DELIVERED,
+        )
+    ]
+    failed = [
+        result for result in results
+        if result.delivery_status == Notification.DeliveryStatus.FAILED
+    ]
+
+    if delivered:
+        feedback = f"Message sent to {recipient_name} by {channel_names(delivered)}."
+        if failed:
+            feedback += f" Delivery failed by {channel_names(failed)}."
+        messages.success(request, feedback)
         return True
-    channels = " and ".join("SMS" if r.channel == Notification.Channel.SMS else "email" for r in results)
-    messages.success(request, f"Message sent to {recipient_name} by {channels}.")
+
+    if failed:
+        messages.error(
+            request,
+            f"The message to {recipient_name} could not be delivered by {channel_names(failed)}. "
+            "See the notification history.",
+        )
+        return True
+
+    messages.warning(request, f"Delivery to {recipient_name} has not yet been confirmed.")
     return True
 
 
