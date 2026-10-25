@@ -1,16 +1,54 @@
-from django.test import TestCase
-from django.test import override_settings
-from unittest.mock import patch
+import smtplib
+from unittest.mock import Mock, patch
 
+from django.core.mail import EmailMessage
+from django.test import SimpleTestCase, TestCase
+from django.test import override_settings
+
+from .email_backends.gmail_api import EmailBackend
 from .models import Notification
 from .services import send_email_notification
 from .views import _report_results
 
 
+class GmailApiEmailBackendTests(SimpleTestCase):
+    @override_settings(
+        GOOGLE_OAUTH_CLIENT_ID="client-id",
+        GOOGLE_OAUTH_CLIENT_SECRET="client-secret",
+        GOOGLE_OAUTH_REFRESH_TOKEN="refresh-token",
+    )
+    @patch("apps.notifications.email_backends.gmail_api.requests.post")
+    def test_sends_email_using_refreshed_oauth_token(self, post):
+        token_response = Mock(ok=True)
+        token_response.json.return_value = {"access_token": "access-token", "expires_in": 3600}
+        sent_response = Mock(ok=True)
+        post.side_effect = [token_response, sent_response]
+        message = EmailMessage(
+            "Subject", "Body", "sender@example.com", ["recipient@example.com"]
+        )
+
+        self.assertEqual(EmailBackend().send_messages([message]), 1)
+
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer access-token")
+        self.assertIn("raw", post.call_args.kwargs["json"])
+
+    @override_settings(
+        GOOGLE_OAUTH_CLIENT_ID="",
+        GOOGLE_OAUTH_CLIENT_SECRET="",
+        GOOGLE_OAUTH_REFRESH_TOKEN="",
+    )
+    def test_missing_oauth_configuration_fails_explicitly(self):
+        message = EmailMessage("Subject", "Body", "sender@example.com", ["recipient@example.com"])
+
+        with self.assertRaisesRegex(smtplib.SMTPException, "credentials are missing"):
+            EmailBackend().send_messages([message])
+
+
 class EmailNotificationTests(TestCase):
     @override_settings(DEFAULT_FROM_EMAIL="noreply@example.com")
-    @patch("apps.notifications.services.send_mail", side_effect=TimeoutError("SMTP connection timed out"))
-    def test_smtp_timeout_is_recorded_as_failed_delivery(self, send_mail):
+    @patch("apps.notifications.services.send_mail", side_effect=TimeoutError("Email request timed out"))
+    def test_email_timeout_is_recorded_as_failed_delivery(self, send_mail):
         notification = send_email_notification(
             "owner@example.com",
             "Franchise update",

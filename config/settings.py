@@ -141,15 +141,14 @@ SMS_BACKEND = env("SMS_BACKEND", default="apps.notifications.sms_backends.consol
 SMS_API_KEY = env("SMS_API_KEY", default="")
 SMS_SENDER_NAME = env("SMS_SENDER_NAME", default="")
 
-EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND",
+    default="apps.notifications.email_backends.gmail_api.EmailBackend",
+)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@tricyclefranchise.local")
-if EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
-    EMAIL_HOST = env("EMAIL_HOST", default="")
-    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
-    EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=10)
-    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
-    EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
-    EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
+GOOGLE_OAUTH_CLIENT_SECRET = env("GOOGLE_OAUTH_CLIENT_SECRET", default="")
+GOOGLE_OAUTH_REFRESH_TOKEN = env("GOOGLE_OAUTH_REFRESH_TOKEN", default="")
 
 # Public address of the site, used for the links in SMS and email messages.
 SITE_URL = env("SITE_URL", default="http://127.0.0.1:8000")
