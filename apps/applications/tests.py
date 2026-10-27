@@ -1,5 +1,6 @@
 import tempfile
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.cache import cache
@@ -9,7 +10,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from apps.applicants.models import Applicant
-from apps.documents.models import DocumentRequirement
+from apps.documents.models import ApplicationDocument, DocumentRequirement
 from apps.franchises.models import Vehicle, FranchiseHolder, Franchise
 from apps.notifications.models import Notification
 from apps.violations.models import Violation
@@ -558,3 +559,45 @@ class SubmissionConfirmationTests(TestCase):
 
         self.assertContains(response, "Renewal Submitted Successfully")
         self.assertContains(response, "Your renewal reference code is:")
+
+
+class StaffApplicationDocumentLinkTests(TestCase):
+    def test_document_link_uses_root_relative_media_url(self):
+        applicant = Applicant.objects.create(
+            first_name="Taylor",
+            last_name="Applicant",
+            address="Bontoc",
+            contact_number="09171234567",
+        )
+        application = Application.objects.create(
+            applicant=applicant,
+            type=Application.ApplicationType.NEW,
+        )
+        requirement = DocumentRequirement.objects.create(name="Valid ID")
+        staff_user = User.objects.create_user(
+            username="document_reviewer",
+            password="test-password",
+            role=User.Role.STAFF,
+        )
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            file_name = f"applications/{application.id}/req_{requirement.id}/id.pdf"
+            document = ApplicationDocument.objects.create(
+                application=application,
+                document_requirement=requirement,
+                uploaded_file=file_name,
+            )
+            file_path = Path(media_root) / document.uploaded_file.name
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_bytes(b"%PDF-1.4 test document")
+            self.client.force_login(staff_user)
+            response = self.client.get(
+                reverse("staff_applications:detail", kwargs={"reference_code": application.reference_code})
+            )
+            file_response = self.client.get(document.uploaded_file.url)
+            file_content = b"".join(file_response.streaming_content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="/media/{document.uploaded_file.name}"')
+        self.assertEqual(file_response.status_code, 200)
+        self.assertEqual(file_content, b"%PDF-1.4 test document")
