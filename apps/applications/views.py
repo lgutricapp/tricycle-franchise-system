@@ -686,6 +686,10 @@ def confirm_franchise_number(request, reference_code):
         messages.error(request, "This application is not awaiting a franchise number.")
         return redirect("staff_applications:approved_list")
 
+    if not application.franchise_number_unlocked_at:
+        messages.error(request, "Send a message successfully to the applicant before entering a franchise number.")
+        return redirect("staff_applications:approved_list")
+
     raw_number = request.POST.get("franchise_number", "")
     try:
         franchise_number = validate_franchise_number(raw_number)

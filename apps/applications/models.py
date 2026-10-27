@@ -43,6 +43,7 @@ class Application(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
     policy_accepted_at = models.DateTimeField(null=True, blank=True)
     policy_version_accepted = models.CharField(max_length=20, blank=True)
+    franchise_number_unlocked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

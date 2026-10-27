@@ -601,3 +601,93 @@ class StaffApplicationDocumentLinkTests(TestCase):
         self.assertContains(response, f'href="/media/{document.uploaded_file.name}"')
         self.assertEqual(file_response.status_code, 200)
         self.assertEqual(file_content, b"%PDF-1.4 test document")
+
+
+class ApprovedApplicationFranchiseNumberGateTests(TestCase):
+    def setUp(self):
+        self.applicant = Applicant.objects.create(
+            first_name="Jordan",
+            last_name="Applicant",
+            address="Bontoc",
+            contact_number="09171234567",
+        )
+        self.vehicle = Vehicle.objects.create(
+            plate_number="GATE-1001",
+            engine_number="GATE-ENG-1001",
+            chassis_number="GATE-CHS-1001",
+            make="Honda",
+            model="TMX",
+            color="Red",
+        )
+        self.application = Application.objects.create(
+            applicant=self.applicant,
+            vehicle=self.vehicle,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.APPROVED,
+        )
+        self.staff = User.objects.create_user(
+            username="franchise_gate_staff",
+            password="test-password",
+            role=User.Role.STAFF,
+        )
+        self.client.force_login(self.staff)
+        self.approved_list_url = reverse("staff_applications:approved_list")
+        self.send_message_url = reverse(
+            "notifications:send_to_applicant",
+            kwargs={"reference_code": self.application.reference_code},
+        )
+        self.confirm_number_url = reverse(
+            "staff_applications:confirm_franchise_number",
+            kwargs={"reference_code": self.application.reference_code},
+        )
+
+    def test_franchise_number_is_shown_only_after_successful_message_delivery(self):
+        response = self.client.get(self.approved_list_url)
+        self.assertContains(response, 'class="btn btn-sm btn-outline-secondary js-send-message"')
+        self.assertNotContains(response, 'class="btn btn-sm btn-accent js-enter-franchise"')
+
+        with patch(
+            "apps.notifications.views.notify_applicant",
+            return_value=[Notification(
+                channel=Notification.Channel.SMS,
+                delivery_status=Notification.DeliveryStatus.SENT,
+            )],
+        ):
+            response = self.client.post(self.send_message_url, {"message": "Your application is approved."})
+
+        self.assertRedirects(response, self.approved_list_url)
+        self.application.refresh_from_db()
+        self.assertIsNotNone(self.application.franchise_number_unlocked_at)
+
+        response = self.client.get(self.approved_list_url)
+        self.assertNotContains(response, 'class="btn btn-sm btn-outline-secondary js-send-message"')
+        self.assertContains(response, 'class="btn btn-sm btn-accent js-enter-franchise"')
+
+        response = self.client.post(self.confirm_number_url, {"franchise_number": "TRI-GATE-1001"})
+        self.assertRedirects(response, self.approved_list_url)
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.COMPLETED)
+        self.assertEqual(self.application.franchise.franchise_number, "TRI-GATE-1001")
+
+    def test_failed_message_delivery_does_not_unlock_franchise_number(self):
+        with patch(
+            "apps.notifications.views.notify_applicant",
+            return_value=[Notification(
+                channel=Notification.Channel.SMS,
+                delivery_status=Notification.DeliveryStatus.FAILED,
+            )],
+        ):
+            self.client.post(self.send_message_url, {"message": "Your application is approved."})
+
+        self.application.refresh_from_db()
+        self.assertIsNone(self.application.franchise_number_unlocked_at)
+
+        response = self.client.get(self.approved_list_url)
+        self.assertContains(response, 'class="btn btn-sm btn-outline-secondary js-send-message"')
+        self.assertNotContains(response, 'class="btn btn-sm btn-accent js-enter-franchise"')
+
+        response = self.client.post(self.confirm_number_url, {"franchise_number": "TRI-GATE-1001"})
+        self.assertRedirects(response, self.approved_list_url)
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.APPROVED)
+        self.assertFalse(Franchise.objects.filter(franchise_number="TRI-GATE-1001").exists())

@@ -22,13 +22,12 @@
                                 data-url="{% url 'staff_applications:summary' app.reference_code %}"
                                 data-ref="{{ app.reference_code }}">View</button>
                         {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
-                            {% if app.type == "NEW" and app.status == "APPROVED" %}
+                            {% if app.type == "NEW" and app.status == "APPROVED" and app.franchise_number_unlocked_at %}
                             <button type="button" class="btn btn-sm btn-accent js-enter-franchise"
                                     data-url="{% url 'staff_applications:confirm_franchise_number' app.reference_code %}"
                                     data-ref="{{ app.reference_code }}"
                                     data-name="{{ app.applicant.full_name }}">Enter Franchise Number</button>
-                            {% endif %}
-                            {% if show_message_button %}
+                            {% elif show_message_button %}
                             <button type="button" class="btn btn-sm btn-outline-secondary js-send-message"
                                     data-url="{% url 'notifications:send_to_applicant' app.reference_code %}"
                                     data-name="{{ app.applicant.full_name }}">Send A Message</button>

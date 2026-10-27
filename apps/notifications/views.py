@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from apps.accounts.decorators import role_required
 from apps.accounts.models import User
 from apps.applications.models import Application
@@ -126,6 +127,19 @@ def send_to_applicant(request, reference_code):
                     "recipient": application.applicant.full_name,
                     "channels": [r.channel for r in results],
                 })
+                if (
+                    application.type == Application.ApplicationType.NEW
+                    and application.status == Application.Status.APPROVED
+                    and any(
+                        result.delivery_status in (
+                            Notification.DeliveryStatus.SENT,
+                            Notification.DeliveryStatus.DELIVERED,
+                        )
+                        for result in results
+                    )
+                ):
+                    application.franchise_number_unlocked_at = timezone.now()
+                    application.save(update_fields=["franchise_number_unlocked_at"])
 
     if application.type == Application.ApplicationType.RENEWAL:
         return redirect("staff_applications:approved_renewals_list")
