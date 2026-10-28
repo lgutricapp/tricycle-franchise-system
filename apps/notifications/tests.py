@@ -6,9 +6,19 @@ from django.test import SimpleTestCase, TestCase
 from django.test import override_settings
 
 from .email_backends.gmail_api import EmailBackend
+from .message_templates import tracking_url
 from .models import Notification
 from .services import send_email_notification
 from .views import _report_results
+
+
+class TrackingURLTests(SimpleTestCase):
+    @override_settings(SITE_URL="https://tricycle-franchise-system.onrender.com/")
+    def test_tracking_url_uses_public_site_and_application_tracking_path(self):
+        self.assertEqual(
+            tracking_url(),
+            "https://tricycle-franchise-system.onrender.com/apply/track/",
+        )
 
 
 class GmailApiEmailBackendTests(SimpleTestCase):

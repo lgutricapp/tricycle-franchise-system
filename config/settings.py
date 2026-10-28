@@ -151,7 +151,7 @@ GOOGLE_OAUTH_CLIENT_SECRET = env("GOOGLE_OAUTH_CLIENT_SECRET", default="")
 GOOGLE_OAUTH_REFRESH_TOKEN = env("GOOGLE_OAUTH_REFRESH_TOKEN", default="")
 
 # Public address of the site, used for the links in SMS and email messages.
-SITE_URL = env("SITE_URL", default="http://127.0.0.1:8000")
+SITE_URL = env("SITE_URL", default="https://tricycle-franchise-system.onrender.com")
 
 # ----- Production security (active only when DEBUG is off) -----
 if not DEBUG:

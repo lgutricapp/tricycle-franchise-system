@@ -3,7 +3,7 @@ from django.urls import reverse
 
 
 def tracking_url():
-    base = getattr(settings, "SITE_URL", "http://127.0.0.1:8000").rstrip("/")
+    base = getattr(settings, "SITE_URL", "https://tricycle-franchise-system.onrender.com").rstrip("/")
     return base + reverse("applications:track")
 
 
