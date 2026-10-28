@@ -673,7 +673,7 @@ def renewal_applications_list(request):
 def approved_applications_list(request):
     applications = Application.objects.select_related("applicant", "franchise").filter(
         type=Application.ApplicationType.NEW,
-        status__in=[Application.Status.APPROVED, Application.Status.COMPLETED],
+        status=Application.Status.APPROVED,
     ).order_by("-updated_at")
     franchise_retry = request.session.pop("franchise_retry", None)
     return render(request, "applications/status_filtered_list.html", {

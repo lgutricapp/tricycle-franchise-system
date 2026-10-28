@@ -853,6 +853,9 @@ class ApprovedApplicationFranchiseNumberGateTests(TestCase):
         self.assertEqual(self.application.status, Application.Status.COMPLETED)
         self.assertEqual(self.application.franchise.franchise_number, "TRI-GATE-1001")
 
+        response = self.client.get(self.approved_list_url)
+        self.assertNotContains(response, self.application.reference_code)
+
     def test_failed_message_delivery_does_not_unlock_franchise_number(self):
         with patch(
             "apps.notifications.views.notify_applicant",
