@@ -507,6 +507,7 @@ class ApplicationValidationFeedbackTests(TestCase):
     def test_new_application_is_blocked_for_person_with_pending_application(self):
         applicant = Applicant.objects.create(
             first_name="Alex",
+            middle_name="Jose",
             last_name="Applicant",
             address="Bontoc",
             contact_number="09171234567",

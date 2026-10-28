@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 from apps.audit.services import log_action
-from apps.core.names import compose_full_name, normalize_name
+from apps.core.names import normalize_name
 from apps.notifications.message_templates import (
     approved_message, rejected_message, revision_required_message,
 )
@@ -64,13 +64,15 @@ class FranchiseNumberError(Exception):
     pass
 
 
-def has_pending_application_for_person(first_name, middle_name, last_name):
-    full_name = normalize_name(compose_full_name(first_name, middle_name, last_name))
+def has_pending_application_for_person(first_name, last_name):
+    normalized_first_name = normalize_name(first_name)
+    normalized_last_name = normalize_name(last_name)
     applications = Application.objects.filter(
         status__in=PENDING_APPLICATION_STATUSES,
     ).select_related("applicant")
     return any(
-        normalize_name(application.applicant.full_name) == full_name
+        normalize_name(application.applicant.first_name) == normalized_first_name
+        and normalize_name(application.applicant.last_name) == normalized_last_name
         for application in applications
     )
 

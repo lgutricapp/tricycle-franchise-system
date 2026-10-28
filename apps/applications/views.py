@@ -107,7 +107,6 @@ def new_application(request):
         )
         if forms_valid and has_pending_application_for_person(
             applicant_form.cleaned_data["first_name"],
-            applicant_form.cleaned_data["middle_name"],
             applicant_form.cleaned_data["last_name"],
         ):
             applicant_form.add_error(
@@ -210,7 +209,6 @@ def renewal_lookup(request):
                 return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
             if has_pending_application_for_person(
                 franchise.holder.first_name,
-                franchise.holder.middle_name,
                 franchise.holder.last_name,
             ):
                 error = (
@@ -309,7 +307,6 @@ def renewal_form(request, franchise_number):
         })
     if has_pending_application_for_person(
         franchise.holder.first_name,
-        franchise.holder.middle_name,
         franchise.holder.last_name,
     ):
         messages.error(
