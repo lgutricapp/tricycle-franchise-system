@@ -564,18 +564,32 @@ def staff_application_detail(request, reference_code):
                         )
                         return redirect("staff_applications:detail", reference_code=application.reference_code)
 
-                    if new_status in (Application.Status.APPROVED, Application.Status.REJECTED):
-                        revision_flagged_docs = [
-                            doc.document_requirement.name for doc in documents
-                            if doc.status == ApplicationDocument.Status.REVISION_REQUIRED
-                        ]
-                        if revision_flagged_docs:
-                            messages.error(
-                                request,
-                                "Cannot approve or reject — the following document(s) are still "
-                                "tagged Revision Required and must be resolved first: " + ", ".join(revision_flagged_docs)
-                            )
-                            return redirect("staff_applications:detail", reference_code=application.reference_code)
+                    blocked_documents = [
+                        doc.document_requirement.name for doc in documents
+                        if doc.status in (
+                            ApplicationDocument.Status.REVISION_REQUIRED,
+                            ApplicationDocument.Status.REJECTED,
+                        )
+                    ]
+                    if new_status == Application.Status.APPROVED and blocked_documents:
+                        messages.error(
+                            request,
+                            "Cannot approve — resolve the following document(s) marked "
+                            "Requires Revision or Rejected first: " + ", ".join(blocked_documents)
+                        )
+                        return redirect("staff_applications:detail", reference_code=application.reference_code)
+                    if (
+                        new_status == Application.Status.REJECTED
+                        and any(
+                            doc.status == ApplicationDocument.Status.REVISION_REQUIRED
+                            for doc in documents
+                        )
+                    ):
+                        messages.error(
+                            request,
+                            "Cannot reject — resolve documents tagged Revision Required first."
+                        )
+                        return redirect("staff_applications:detail", reference_code=application.reference_code)
 
                 try:
                     transition_application(application, new_status, request.user, remarks)
@@ -599,9 +613,12 @@ def staff_application_detail(request, reference_code):
         doc.document_requirement.name for doc in documents
         if doc.status == ApplicationDocument.Status.PENDING
     ]
-    revision_required_document_names = [
+    approval_blocked_document_names = [
         doc.document_requirement.name for doc in documents
-        if doc.status == ApplicationDocument.Status.REVISION_REQUIRED
+        if doc.status in (
+            ApplicationDocument.Status.REVISION_REQUIRED,
+            ApplicationDocument.Status.REJECTED,
+        )
     ]
 
     return render(request, "applications/staff_application_detail.html", {
@@ -611,7 +628,7 @@ def staff_application_detail(request, reference_code):
         "allowed_next_statuses": allowed_next_statuses,
         "document_status_choices": ApplicationDocument.Status.choices,
         "pending_document_names": pending_document_names,
-        "revision_required_document_names": revision_required_document_names,
+        "approval_blocked_document_names": approval_blocked_document_names,
     })
 
 

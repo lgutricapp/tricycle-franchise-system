@@ -2,6 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from apps.audit.services import log_action
 from apps.core.names import normalize_name
+from apps.documents.models import ApplicationDocument
 from apps.notifications.message_templates import (
     approved_message, rejected_message, revision_required_message,
 )
@@ -118,6 +119,20 @@ def transition_application(application, new_status, actor, remarks="", notify=Tr
         and franchise_has_unsettled_violations(application.franchise)
     ):
         raise InvalidTransition("A renewal cannot be approved while the franchise has unsettled violations.")
+
+    if new_status == Application.Status.APPROVED:
+        unresolved_documents = application.documents.filter(
+            superseded_by_set__isnull=True,
+            status__in=[
+                ApplicationDocument.Status.REVISION_REQUIRED,
+                ApplicationDocument.Status.REJECTED,
+            ],
+        )
+        if unresolved_documents.exists():
+            raise InvalidTransition(
+                "This application cannot be approved while any document is marked "
+                "Requires Revision or Rejected."
+            )
 
     allowed = get_allowed_transitions(application)
     if new_status not in allowed:

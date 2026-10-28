@@ -26,8 +26,8 @@
                     {% endif %}
 
                     {% if "APPROVED" in allowed_next_statuses %}
-                        {% if revision_required_document_names %}
-                            <span tabindex="0" data-bs-toggle="tooltip" title="A document is tagged as Requires Revision. Resolve it before you can approve.">
+                        {% if approval_blocked_document_names %}
+                            <span tabindex="0" data-bs-toggle="tooltip" title="Documents marked Requires Revision or Rejected must be resolved before approval.">
                                 <button type="button" class="btn btn-accent" disabled style="pointer-events: none;">
                                     <i class="bi bi-check-circle"></i> Approve
                                 </button>

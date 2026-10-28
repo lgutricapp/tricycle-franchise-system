@@ -787,6 +787,58 @@ class StaffApplicationDocumentLinkTests(TestCase):
         self.assertEqual(file_content, b"%PDF-1.4 test document")
 
 
+class ApprovalDocumentGateTests(TestCase):
+    def test_approval_is_disabled_and_rejected_when_document_needs_revision_or_is_rejected(self):
+        applicant = Applicant.objects.create(
+            first_name="Taylor",
+            last_name="Applicant",
+            address="Bontoc",
+            contact_number="09171234567",
+        )
+        application = Application.objects.create(
+            applicant=applicant,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.UNDER_REVIEW,
+        )
+        requirement = DocumentRequirement.objects.create(name="Valid ID")
+        document = ApplicationDocument.objects.create(
+            application=application,
+            document_requirement=requirement,
+            uploaded_file="applications/test/valid-id.pdf",
+        )
+        staff_user = User.objects.create_user(
+            username="approval_document_reviewer",
+            password="test-password",
+            role=User.Role.STAFF,
+        )
+        self.client.force_login(staff_user)
+        detail_url = reverse(
+            "staff_applications:detail",
+            kwargs={"reference_code": application.reference_code},
+        )
+
+        for document_status in (
+            ApplicationDocument.Status.REVISION_REQUIRED,
+            ApplicationDocument.Status.REJECTED,
+        ):
+            with self.subTest(document_status=document_status):
+                document.status = document_status
+                document.save()
+
+                response = self.client.get(detail_url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Documents marked Requires Revision or Rejected")
+                self.assertContains(response, 'class="btn btn-accent" disabled')
+
+                response = self.client.post(detail_url, {
+                    "action": "transition_status",
+                    "new_status": Application.Status.APPROVED,
+                })
+                self.assertRedirects(response, detail_url)
+                application.refresh_from_db()
+                self.assertEqual(application.status, Application.Status.UNDER_REVIEW)
+
+
 class ApprovedApplicationFranchiseNumberGateTests(TestCase):
     def setUp(self):
         self.applicant = Applicant.objects.create(
