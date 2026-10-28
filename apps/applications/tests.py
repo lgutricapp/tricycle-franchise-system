@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
+from django.utils import timezone
 from apps.applicants.models import Applicant
 from apps.documents.models import ApplicationDocument, DocumentRequirement
 from apps.franchises.models import Vehicle, FranchiseHolder, Franchise
@@ -325,6 +326,37 @@ class RenewalOTPTests(TestCase):
         response = self.client.get(self.renewal_url)
         self.assertRedirects(response, self.lookup_url)
 
+    def test_pending_application_blocks_renewal_until_rejected(self):
+        applicant = Applicant.objects.create(
+            first_name=self.holder.first_name,
+            middle_name=self.holder.middle_name,
+            last_name=self.holder.last_name,
+            address=self.holder.address,
+            contact_number=self.holder.contact_number,
+        )
+        application = Application.objects.create(
+            applicant=applicant,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.SUBMITTED,
+        )
+        session = self.client.session
+        session["renewal_verified"] = {
+            "franchise_id": self.franchise.pk,
+            "expires_at": timezone.now().timestamp() + 900,
+        }
+        session.save()
+
+        blocked_response = self.client.get(self.renewal_url)
+        self.assertRedirects(blocked_response, self.lookup_url)
+        self.assertEqual(Application.objects.count(), 1)
+
+        application.status = Application.Status.REJECTED
+        application.save()
+
+        allowed_response = self.client.get(self.renewal_url)
+        self.assertEqual(allowed_response.status_code, 200)
+        self.assertContains(allowed_response, "Submit Renewal")
+
     def test_otp_verification_is_bound_to_its_franchise(self):
         with patch("apps.notifications.services.deliver_sms", return_value={"success": True}):
             self.client.post(self.lookup_url, {
@@ -417,6 +449,48 @@ class VehicleFormTests(TestCase):
         })
         self.assertTrue(form.is_valid())
 
+    def test_exact_vehicle_can_be_reused_after_all_previous_applications_are_terminal(self):
+        vehicle = Vehicle.objects.get(plate_number="DUP-0001")
+        applicant = Applicant.objects.create(
+            first_name="Alex", last_name="Applicant", address="Bontoc",
+            contact_number="09171234567",
+        )
+        Application.objects.create(
+            applicant=applicant,
+            vehicle=vehicle,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.CANCELLED,
+        )
+
+        form = VehicleForm(data={
+            "plate_number": "DUP-0001", "engine_number": "ENGDUP", "chassis_number": "CHSDUP",
+            "make": "Honda", "model": "TMX", "color": "Black",
+        })
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.existing_vehicle, vehicle)
+
+    def test_exact_vehicle_cannot_be_reused_while_application_is_pending(self):
+        vehicle = Vehicle.objects.get(plate_number="DUP-0001")
+        applicant = Applicant.objects.create(
+            first_name="Alex", last_name="Applicant", address="Bontoc",
+            contact_number="09171234567",
+        )
+        Application.objects.create(
+            applicant=applicant,
+            vehicle=vehicle,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.SUBMITTED,
+        )
+
+        form = VehicleForm(data={
+            "plate_number": "DUP-0001", "engine_number": "ENGDUP", "chassis_number": "CHSDUP",
+            "make": "Honda", "model": "TMX", "color": "Black",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("plate_number", form.errors)
+
 
 class PolicyAcceptanceFormTests(TestCase):
     def test_policy_acceptance_is_required(self):
@@ -430,6 +504,115 @@ class PolicyAcceptanceFormTests(TestCase):
 
 
 class ApplicationValidationFeedbackTests(TestCase):
+    def test_new_application_is_blocked_for_person_with_pending_application(self):
+        applicant = Applicant.objects.create(
+            first_name="Alex",
+            last_name="Applicant",
+            address="Bontoc",
+            contact_number="09171234567",
+        )
+        Application.objects.create(
+            applicant=applicant,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.UNDER_REVIEW,
+        )
+        data = {
+            "first_name": "Alex",
+            "middle_name": "",
+            "last_name": "Applicant",
+            "address": "Bontoc",
+            "contact_number": "09178889999",
+            "email": "",
+            "plate_number": "PEND-1001",
+            "engine_number": "PEND-ENG-1001",
+            "chassis_number": "PEND-CHS-1001",
+            "make": "Honda",
+            "model": "TMX",
+            "color": "Red",
+            "accepted": "on",
+        }
+        requirements = DocumentRequirement.objects.filter(
+            active=True,
+            required=True,
+            application_type__in=[
+                DocumentRequirement.ApplicationType.NEW,
+                DocumentRequirement.ApplicationType.BOTH,
+            ],
+        )
+        for requirement in requirements:
+            data[f"document_{requirement.id}"] = SimpleUploadedFile(
+                f"document-{requirement.id}.pdf",
+                b"%PDF-1.4 test document",
+                content_type="application/pdf",
+            )
+
+        response = self.client.post(reverse("applications:new"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You already have an application or renewal in progress.")
+        self.assertEqual(Application.objects.count(), 1)
+
+    def test_rejected_application_allows_new_application_with_same_vehicle(self):
+        vehicle = Vehicle.objects.create(
+            plate_number="REJ-1001",
+            engine_number="REJ-ENG-1001",
+            chassis_number="REJ-CHS-1001",
+            make="Honda",
+            model="TMX",
+            color="Red",
+        )
+        applicant = Applicant.objects.create(
+            first_name="Alex",
+            last_name="Applicant",
+            address="Bontoc",
+            contact_number="09171234567",
+        )
+        Application.objects.create(
+            applicant=applicant,
+            vehicle=vehicle,
+            type=Application.ApplicationType.NEW,
+            status=Application.Status.REJECTED,
+        )
+        data = {
+            "first_name": "Alex",
+            "middle_name": "",
+            "last_name": "Applicant",
+            "address": "Bontoc",
+            "contact_number": "09171234567",
+            "email": "",
+            "plate_number": "REJ-1001",
+            "engine_number": "REJ-ENG-1001",
+            "chassis_number": "REJ-CHS-1001",
+            "make": "Honda",
+            "model": "TMX",
+            "color": "Red",
+            "accepted": "on",
+        }
+        requirements = DocumentRequirement.objects.filter(
+            active=True,
+            required=True,
+            application_type__in=[
+                DocumentRequirement.ApplicationType.NEW,
+                DocumentRequirement.ApplicationType.BOTH,
+            ],
+        )
+        for requirement in requirements:
+            data[f"document_{requirement.id}"] = SimpleUploadedFile(
+                f"document-{requirement.id}.pdf",
+                b"%PDF-1.4 test document",
+                content_type="application/pdf",
+            )
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = self.client.post(reverse("applications:new"), data)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Application.objects.count(), 2)
+        self.assertEqual(
+            Application.objects.exclude(applicant=applicant).get().vehicle,
+            vehicle,
+        )
+
     def test_new_application_error_returns_to_documents_step(self):
         response = self.client.post(reverse("applications:new"), {
             "first_name": "Alex",

@@ -26,6 +26,11 @@
         <div class="card mb-4">
             <div class="card-header">Applicant Information</div>
             <div class="card-body">
+                {% if applicant_form.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ applicant_form.non_field_errors }}
+                    </div>
+                {% endif %}
                 <div class="row">
                     <div class="col-md-4">{{ applicant_form.first_name|as_crispy_field }}</div>
                     <div class="col-md-4">{{ applicant_form.middle_name|as_crispy_field }}</div>

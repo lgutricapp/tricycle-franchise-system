@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 from apps.audit.services import log_action
+from apps.core.names import compose_full_name, normalize_name
 from apps.notifications.message_templates import (
     approved_message, rejected_message, revision_required_message,
 )
@@ -41,6 +42,14 @@ BLOCKING_QUEUE_STATUSES = [
 QUEUE_DISPLAY_STATUSES = BLOCKING_QUEUE_STATUSES + [Application.Status.REVISION_REQUIRED]
 # "Already claimed and actively being worked" — always wins the front position.
 ACTIVE_PROCESSING_STATUSES = [Application.Status.UNDER_REVIEW, Application.Status.FOR_APPROVAL]
+PENDING_APPLICATION_STATUSES = [
+    Application.Status.DRAFT,
+    Application.Status.SUBMITTED,
+    Application.Status.UNDER_REVIEW,
+    Application.Status.REVISION_REQUIRED,
+    Application.Status.RESUBMITTED,
+    Application.Status.FOR_APPROVAL,
+]
 
 
 class InvalidTransition(Exception):
@@ -53,6 +62,17 @@ class QueueLocked(Exception):
 
 class FranchiseNumberError(Exception):
     pass
+
+
+def has_pending_application_for_person(first_name, middle_name, last_name):
+    full_name = normalize_name(compose_full_name(first_name, middle_name, last_name))
+    applications = Application.objects.filter(
+        status__in=PENDING_APPLICATION_STATUSES,
+    ).select_related("applicant")
+    return any(
+        normalize_name(application.applicant.full_name) == full_name
+        for application in applications
+    )
 
 
 def franchise_has_unsettled_violations(franchise):

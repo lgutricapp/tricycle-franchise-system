@@ -1,7 +1,8 @@
 from django import forms
 from apps.applicants.models import Applicant
 from apps.core.validators import CONTACT_NUMBER_VALIDATOR, NAME_VALIDATOR
-from apps.franchises.models import Vehicle
+from apps.franchises.models import Franchise, Vehicle
+from .models import Application
 
 
 class ApplicantForm(forms.ModelForm):
@@ -47,9 +48,18 @@ class ApplicantForm(forms.ModelForm):
 
 
 class VehicleForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.existing_vehicle = None
+
     class Meta:
         model = Vehicle
         fields = ["plate_number", "engine_number", "chassis_number", "make", "model", "color"]
+
+    def validate_unique(self):
+        if self.existing_vehicle:
+            return
+        super().validate_unique()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -61,12 +71,36 @@ class VehicleForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
 
-        if plate and qs.filter(plate_number=plate).exists():
-            self.add_error("plate_number", "A vehicle with this plate number is already registered.")
-        if engine and qs.filter(engine_number=engine).exists():
-            self.add_error("engine_number", "A vehicle with this engine number is already registered.")
-        if chassis and qs.filter(chassis_number=chassis).exists():
-            self.add_error("chassis_number", "A vehicle with this chassis number is already registered.")
+        duplicate_fields = {
+            "plate_number": (plate, "A vehicle with this plate number is already registered."),
+            "engine_number": (engine, "A vehicle with this engine number is already registered."),
+            "chassis_number": (chassis, "A vehicle with this chassis number is already registered."),
+        }
+        duplicates = {
+            field: error
+            for field, (value, error) in duplicate_fields.items()
+            if value and qs.filter(**{field: value}).exists()
+        }
+
+        matching_vehicle = None
+        if plate and engine and chassis:
+            matching_vehicle = qs.filter(
+                plate_number=plate, engine_number=engine, chassis_number=chassis,
+            ).first()
+
+        if matching_vehicle and not Franchise.objects.filter(vehicle=matching_vehicle).exists():
+            previous_applications = Application.objects.filter(vehicle=matching_vehicle)
+            if (
+                previous_applications.exists()
+                and not previous_applications.exclude(
+                    status__in=[Application.Status.CANCELLED, Application.Status.REJECTED]
+                ).exists()
+            ):
+                self.existing_vehicle = matching_vehicle
+                duplicates = {}
+
+        for field, error in duplicates.items():
+            self.add_error(field, error)
         return cleaned_data
 
 

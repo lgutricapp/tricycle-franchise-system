@@ -28,6 +28,7 @@ from .services import (
     BLOCKING_QUEUE_STATUSES, QUEUE_DISPLAY_STATUSES, get_timeline_progress,
     FranchiseNumberError, validate_franchise_number, register_franchise,
     get_allowed_transitions, franchise_has_unsettled_violations,
+    has_pending_application_for_person,
 )
 
 UNSETTLED_VIOLATION_ERROR = (
@@ -97,17 +98,29 @@ def new_application(request):
         policy_acceptance_form = PolicyAcceptanceForm(request.POST)
         missing_required_docs, file_errors, valid_files, document_errors = _validate_document_uploads(request, requirements)
 
-        if (
+        forms_valid = (
             applicant_form.is_valid()
             and vehicle_form.is_valid()
             and policy_acceptance_form.is_valid()
             and not missing_required_docs
             and not file_errors
+        )
+        if forms_valid and has_pending_application_for_person(
+            applicant_form.cleaned_data["first_name"],
+            applicant_form.cleaned_data["middle_name"],
+            applicant_form.cleaned_data["last_name"],
         ):
+            applicant_form.add_error(
+                None,
+                "You already have an application or renewal in progress. "
+                "You may apply again after it is cancelled or rejected.",
+            )
+
+        if forms_valid and not applicant_form.errors:
             with transaction.atomic():
                 submitted_at = timezone.now()
                 applicant = applicant_form.save()
-                vehicle = vehicle_form.save()
+                vehicle = vehicle_form.existing_vehicle or vehicle_form.save()
 
                 application = Application.objects.create(
                     applicant=applicant,
@@ -194,6 +207,16 @@ def renewal_lookup(request):
         if franchise and normalize_name(last_name) == normalize_name(franchise.holder.last_name):
             if franchise_has_unsettled_violations(franchise):
                 error = UNSETTLED_VIOLATION_ERROR
+                return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
+            if has_pending_application_for_person(
+                franchise.holder.first_name,
+                franchise.holder.middle_name,
+                franchise.holder.last_name,
+            ):
+                error = (
+                    "You already have an application or renewal in progress. "
+                    "You may apply again after it is cancelled or rejected."
+                )
                 return render(request, "applications/renewal_lookup.html", {"form": form, "error": error})
             now = timezone.now().timestamp()
             last_sent_at = request.session.get("renewal_otp_last_sent_at", 0)
@@ -284,6 +307,17 @@ def renewal_form(request, franchise_number):
             "form": RenewalLookupForm(),
             "error": UNSETTLED_VIOLATION_ERROR,
         })
+    if has_pending_application_for_person(
+        franchise.holder.first_name,
+        franchise.holder.middle_name,
+        franchise.holder.last_name,
+    ):
+        messages.error(
+            request,
+            "You already have an application or renewal in progress. "
+            "You may apply again after it is cancelled or rejected.",
+        )
+        return redirect("applications:renewal_lookup")
     if not _has_renewal_verification(request, franchise):
         messages.error(request, "Verify the code sent to the franchise owner's phone before renewing.")
         return redirect("applications:renewal_lookup")
