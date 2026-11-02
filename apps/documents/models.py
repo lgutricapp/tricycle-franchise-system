@@ -1,4 +1,9 @@
+import os
+import re
+
 from django.db import models
+from django.utils import timezone
+
 from .validators import validate_document_file
 
 
@@ -23,12 +28,26 @@ class DocumentRequirement(models.Model):
         return self.name
 
 
+def _named_document_filename(instance, filename):
+    extension = os.path.splitext(filename)[1]
+    requirement_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", instance.document_requirement.name)
+    requirement_name = re.sub(r"\s+", " ", requirement_name).strip(" .")
+    requirement_name = requirement_name or "Document"
+    return f"{requirement_name} - {timezone.localdate().isoformat()}{extension}"
+
+
 def document_upload_path(instance, filename):
-    return f"applications/{instance.application_id}/req_{instance.document_requirement_id}/{filename}"
+    return (
+        f"applications/{instance.application_id}/req_{instance.document_requirement_id}/"
+        f"{_named_document_filename(instance, filename)}"
+    )
 
 
 def franchise_document_path(instance, filename):
-    return f"franchises/{instance.franchise_id}/req_{instance.document_requirement_id}/{filename}"
+    return (
+        f"franchises/{instance.franchise_id}/req_{instance.document_requirement_id}/"
+        f"{_named_document_filename(instance, filename)}"
+    )
 
 
 class ApplicationDocument(models.Model):

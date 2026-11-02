@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from django.db.models import Q
 from django.utils import timezone
@@ -11,25 +11,35 @@ from apps.documents.models import ApplicationDocument
 
 
 def refresh_franchise_statuses():
-    """
-    Keep each franchise's stored status in line with its expiration date.
-    Revoked franchises are left alone.
-    """
+    """Keep each franchise's stored status aligned with its expiration date."""
     today = timezone.localdate()
+    renewal_cutoff = today + timedelta(days=30)
+
     Franchise.objects.filter(
-        status=Franchise.Status.ACTIVE, expiration_date__lt=today
-    ).update(status=Franchise.Status.EXPIRED)
+        expiration_date__lt=today,
+    ).exclude(status=Franchise.Status.REVOKED).update(status=Franchise.Status.EXPIRED)
+
     Franchise.objects.filter(
-        status=Franchise.Status.EXPIRED, expiration_date__gte=today
+        expiration_date__gte=today,
+        expiration_date__lte=renewal_cutoff,
+    ).exclude(status=Franchise.Status.REVOKED).update(status=Franchise.Status.DUE_FOR_RENEWAL)
+
+    Franchise.objects.filter(
+        expiration_date__gt=renewal_cutoff,
+    ).exclude(status=Franchise.Status.REVOKED).update(status=Franchise.Status.ACTIVE)
+
+    Franchise.objects.filter(
+        status=Franchise.Status.EXPIRED,
+        expiration_date__gte=today,
     ).update(status=Franchise.Status.ACTIVE)
 
 
 def current_franchises_queryset():
-    """Franchises listed under Franchise Holders: not expired (revoked ones stay visible)."""
+    """Franchises listed under Franchise Holders: active and renewal-due records only."""
     today = timezone.localdate()
     return Franchise.objects.filter(
-        Q(status=Franchise.Status.REVOKED) | Q(expiration_date__gte=today)
-    )
+        expiration_date__gte=today
+    ).exclude(status=Franchise.Status.EXPIRED).exclude(status=Franchise.Status.REVOKED)
 
 
 def expired_franchises_queryset():

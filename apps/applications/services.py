@@ -4,7 +4,10 @@ from apps.audit.services import log_action
 from apps.core.names import normalize_name
 from apps.documents.models import ApplicationDocument
 from apps.notifications.message_templates import (
-    approved_message, rejected_message, revision_required_message,
+    approved_message,
+    rejected_message,
+    revision_required_message,
+    review_started_message,
 )
 from apps.notifications.services import notify_applicant
 from .models import Application, StatusHistory
@@ -27,6 +30,7 @@ ALLOWED_TRANSITIONS = {
 
 # Automatic applicant messages (SMS, plus email when the applicant provided one).
 STATUS_MESSAGE_BUILDERS = {
+    Application.Status.UNDER_REVIEW: review_started_message,
     Application.Status.REVISION_REQUIRED: revision_required_message,
     Application.Status.APPROVED: approved_message,
     Application.Status.REJECTED: rejected_message,

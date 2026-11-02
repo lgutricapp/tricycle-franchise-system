@@ -118,6 +118,23 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(env("MEDIA_ROOT", default=str(BASE_DIR / "media")))
 
+GOOGLE_DRIVE_ENABLED = env.bool("GOOGLE_DRIVE_ENABLED", default=False)
+GOOGLE_DRIVE_FOLDER_ID = env("GOOGLE_DRIVE_FOLDER_ID", default="")
+GOOGLE_DRIVE_REFRESH_TOKEN = env("GOOGLE_DRIVE_REFRESH_TOKEN", default="")
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "apps.documents.storage.GoogleDriveStorage"
+            if GOOGLE_DRIVE_ENABLED
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"

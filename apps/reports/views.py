@@ -87,7 +87,10 @@ def report_index(request):
             choice for choice in Application.Status.choices
             if choice[0] != Application.Status.DRAFT
         ],
-        "franchise_status_choices": Franchise.Status.choices,
+        "franchise_status_choices": [
+            choice for choice in Franchise.Status.choices
+            if choice[0] not in {Franchise.Status.EXPIRED, Franchise.Status.REVOKED}
+        ],
         "report_data": report_data,
         "query_string": query_string,
     }

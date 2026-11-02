@@ -103,6 +103,56 @@ class ApplicationTransitionTests(TestCase):
         self.assertEqual(latest.remarks, "Looks complete")
         self.assertEqual(latest.changed_by, self.staff)
 
+    def test_opening_new_and_renewal_reviews_notifies_available_channels_once(self):
+        self.applicant.email = "maria@example.com"
+        self.applicant.save(update_fields=["email"])
+        renewal = Application.objects.create(
+            applicant=self.applicant,
+            vehicle=self.vehicle,
+            type=Application.ApplicationType.RENEWAL,
+            status=Application.Status.SUBMITTED,
+        )
+        self.client.force_login(self.staff)
+
+        with (
+            patch("apps.notifications.services.deliver_sms", return_value={"success": True}) as send_sms,
+            patch("apps.notifications.services.send_mail") as send_email,
+        ):
+            for application in (self.application, renewal):
+                response = self.client.get(
+                    reverse(
+                        "staff_applications:detail",
+                        kwargs={"reference_code": application.reference_code},
+                    )
+                )
+                self.assertEqual(response.status_code, 200)
+
+            self.client.get(
+                reverse(
+                    "staff_applications:detail",
+                    kwargs={"reference_code": self.application.reference_code},
+                )
+            )
+
+        self.assertEqual(send_sms.call_count, 2)
+        self.assertEqual(send_email.call_count, 2)
+        notification_count = Notification.objects.filter(
+            application__in=[self.application, renewal]
+        ).count()
+        self.assertEqual(notification_count, 4)
+        for application in (self.application, renewal):
+            notifications = application.notifications.all()
+            self.assertEqual(notifications.count(), 2)
+            for notification in notifications:
+                self.assertIn("Municipal Mayor's Office", notification.message)
+                self.assertIn("required documents", notification.message)
+            expected_kind = (
+                "renewal"
+                if application.type == Application.ApplicationType.RENEWAL
+                else "application"
+            )
+            self.assertIn(f"your {expected_kind} is now under review", notifications.first().message)
+
     def test_repeating_revision_required_transition_is_idempotent(self):
         transition_application(self.application, Application.Status.UNDER_REVIEW, self.staff)
         transition_application(self.application, Application.Status.REVISION_REQUIRED, self.staff)

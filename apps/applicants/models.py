@@ -13,6 +13,7 @@ class Applicant(models.Model):
     address = models.TextField()
     contact_number = models.CharField(max_length=20)
     email = models.EmailField(blank=True)
+    google_drive_folder_id = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

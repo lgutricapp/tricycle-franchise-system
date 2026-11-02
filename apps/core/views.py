@@ -1,7 +1,9 @@
 from datetime import timedelta
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.shortcuts import render
 from django.utils import timezone
+from django.http import FileResponse, Http404, JsonResponse
 from apps.accounts.decorators import role_required
 from apps.accounts.models import User
 from apps.applications.models import Application
@@ -13,7 +15,6 @@ from apps.franchises.services import expired_franchises_queryset, refresh_franch
 import mimetypes
 from pathlib import Path
 
-from django.http import FileResponse, Http404, JsonResponse
 from .services import get_monthly_applications_data, get_available_chart_years
 
 
@@ -50,7 +51,8 @@ def dashboard(request):
         "active_franchises": Franchise.objects.filter(status=Franchise.Status.ACTIVE).count(),
         "expired_franchises": expired_franchises_queryset().count(),
         "expiring_soon": Franchise.objects.filter(
-            status=Franchise.Status.ACTIVE, expiration_date__range=(today, soon)
+            status__in=[Franchise.Status.ACTIVE, Franchise.Status.DUE_FOR_RENEWAL],
+            expiration_date__range=(today, soon),
         ).count(),
         "new_pending": Application.objects.filter(type=Application.ApplicationType.NEW)
             .exclude(status__in=ACTIVE_QUEUE_STATUSES_EXCLUDED).count(),
@@ -101,15 +103,26 @@ def monthly_applications_chart_data(request):
 @role_required(User.Role.STAFF, User.Role.REVIEWER)
 def protected_media(request, path):
     """Serve an uploaded file, but only to signed-in staff."""
-    media_root = Path(settings.MEDIA_ROOT).resolve()
-    full_path = (media_root / path).resolve()
-    # Refuse anything that escapes the media folder or isn't a real file
-    if media_root not in full_path.parents or not full_path.is_file():
-        raise Http404
+    if path.startswith(("applications/", "franchises/")):
+        media_root = Path(settings.MEDIA_ROOT).resolve()
+        full_path = (media_root / path).resolve()
+        if media_root not in full_path.parents or not full_path.is_file():
+            raise Http404
+        file_handle = open(full_path, "rb")
+        filename = full_path.name
+    else:
+        try:
+            file_handle = default_storage.open(path, "rb")
+        except FileNotFoundError as error:
+            raise Http404 from error
+        filename = Path(getattr(file_handle, "name", path)).name
 
-    content_type, _ = mimetypes.guess_type(str(full_path))
-    response = FileResponse(open(full_path, "rb"), content_type=content_type or "application/octet-stream")
-    response["Content-Disposition"] = f'inline; filename="{full_path.name}"'
+    content_type, _ = mimetypes.guess_type(filename)
+    response = FileResponse(
+        file_handle,
+        content_type=content_type or "application/octet-stream",
+        filename=filename,
+    )
     response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = "private, no-store"
     return response

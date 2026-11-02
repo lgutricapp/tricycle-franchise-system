@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -40,7 +42,10 @@ def franchise_list(request):
 
     return render(request, "franchises/franchise_list.html", {
         "franchises": franchises,
-        "status_choices": [c for c in Franchise.Status.choices if c[0] != Franchise.Status.EXPIRED],
+        "status_choices": [
+            c for c in Franchise.Status.choices
+            if c[0] not in {Franchise.Status.EXPIRED, Franchise.Status.REVOKED}
+        ],
         "query": query,
         "status_filter": status_filter,
     })
@@ -90,9 +95,13 @@ def add_franchise_manually(request):
                     franchise = franchise_form.save(commit=False)
                     franchise.holder = holder
                     franchise.vehicle = vehicle
+                    today = timezone.localdate()
+                    renewal_cutoff = today + timedelta(days=30)
                     franchise.status = (
                         Franchise.Status.EXPIRED
-                        if franchise.expiration_date < timezone.localdate()
+                        if franchise.expiration_date < today
+                        else Franchise.Status.DUE_FOR_RENEWAL
+                        if franchise.expiration_date <= renewal_cutoff
                         else Franchise.Status.ACTIVE
                     )
                     franchise.source = Franchise.Source.MANUAL

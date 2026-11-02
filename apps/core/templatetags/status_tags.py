@@ -12,7 +12,7 @@ STATUS_TONE_MAP = {
     # Document statuses
     "PENDING": "pending", "REVISION_REQUIRED": "warning",
     # Franchise statuses
-    "ACTIVE": "success", "EXPIRED": "danger", "REVOKED": "danger",
+    "ACTIVE": "success", "DUE_FOR_RENEWAL": "warning", "EXPIRED": "danger", "REVOKED": "danger",
     # Violation statuses
     "UNSETTLED": "danger", "SETTLED": "success",
     # Notification delivery statuses

@@ -39,6 +39,7 @@ class Vehicle(models.Model):
 class Franchise(models.Model):
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
+        DUE_FOR_RENEWAL = "DUE_FOR_RENEWAL", "Due for Renewal"
         EXPIRED = "EXPIRED", "Expired"
         REVOKED = "REVOKED", "Revoked"
 

@@ -20,6 +20,14 @@ def submission_message(application):
     )
 
 
+def review_started_message(application):
+    kind = "renewal" if application.type == "RENEWAL" else "application"
+    return (
+        f"{_greeting(application)}, your {kind} is now under review. "
+        "Please proceed to the Municipal Mayor's Office and bring your required documents."
+    )
+
+
 def revision_required_message(application):
     return f"{_greeting(application)}, your application requires revision. Please visit {tracking_url()}"
 
