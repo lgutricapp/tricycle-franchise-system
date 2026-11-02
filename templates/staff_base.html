@@ -57,7 +57,7 @@
             </a>
             {% if user.role == "STAFF" or user.role == "SUPER_ADMIN" or user.is_superuser %}
             <a class="nav-link {% if request.resolver_match.url_name == 'add_manual' %}active{% endif %}" href="{% url 'franchises:add_manual' %}">
-                <i class="bi bi-person-plus"></i> Add Manually
+                <i class="bi bi-pencil-square"></i> Update Manually
             </a>
             {% endif %}
 
