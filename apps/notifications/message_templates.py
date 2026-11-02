@@ -33,7 +33,12 @@ def revision_required_message(application):
 
 
 def approved_message(application):
-    return f"{_greeting(application)}, your application has been approved. Please wait for further instructions"
+    if application.type == "RENEWAL":
+        return (
+            f"{_greeting(application)}, your renewal has been approved and your "
+            "franchise record has been updated."
+        )
+    return APPROVED_INSTRUCTIONS_TEMPLATE.format(name=application.applicant.full_name)
 
 
 def rejected_message(application):
@@ -43,8 +48,7 @@ def rejected_message(application):
     )
 
 
-# Pre-filled text for the "Send A Message" button on Approved Applications.
-# {name} is replaced with the applicant's name.
+# Instructions sent automatically when a new application is approved.
 APPROVED_INSTRUCTIONS_TEMPLATE = (
     "Good Day Ma'am/Sir {name}, your application has been approved. "
     "Follow the step-by-step process below:\n\n"

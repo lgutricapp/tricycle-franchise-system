@@ -153,6 +153,30 @@ class ApplicationTransitionTests(TestCase):
             )
             self.assertIn(f"your {expected_kind} is now under review", notifications.first().message)
 
+    def test_approving_new_application_sends_full_instructions_by_available_channels(self):
+        self.applicant.email = "maria@example.com"
+        self.applicant.save(update_fields=["email"])
+        transition_application(
+            self.application, Application.Status.UNDER_REVIEW, self.staff, notify=False
+        )
+
+        with (
+            patch("apps.notifications.services.deliver_sms", return_value={"success": True}) as send_sms,
+            patch("apps.notifications.services.send_mail") as send_email,
+        ):
+            transition_application(self.application, Application.Status.APPROVED, self.staff)
+
+        self.assertEqual(send_sms.call_count, 1)
+        self.assertEqual(send_email.call_count, 1)
+        notifications = self.application.notifications.all()
+        self.assertEqual(notifications.count(), 2)
+        for notification in notifications:
+            self.assertIn("your application has been approved", notification.message)
+            self.assertIn("Municipal Treasury Office", notification.message)
+            self.assertIn("Mayor's Office", notification.message)
+            self.assertIn("Bring your unit for inspection", notification.message)
+            self.assertNotIn("wait for further instructions", notification.message)
+
     def test_repeating_revision_required_transition_is_idempotent(self):
         transition_application(self.application, Application.Status.UNDER_REVIEW, self.staff)
         transition_application(self.application, Application.Status.REVISION_REQUIRED, self.staff)
@@ -918,36 +942,18 @@ class ApprovedApplicationFranchiseNumberGateTests(TestCase):
         )
         self.client.force_login(self.staff)
         self.approved_list_url = reverse("staff_applications:approved_list")
-        self.send_message_url = reverse(
-            "notifications:send_to_applicant",
-            kwargs={"reference_code": self.application.reference_code},
-        )
         self.confirm_number_url = reverse(
             "staff_applications:confirm_franchise_number",
             kwargs={"reference_code": self.application.reference_code},
         )
 
-    def test_franchise_number_is_shown_only_after_successful_message_delivery(self):
+    def test_franchise_number_is_available_without_sending_a_manual_message(self):
         response = self.client.get(self.approved_list_url)
-        self.assertContains(response, 'class="btn btn-sm btn-outline-secondary js-send-message"')
-        self.assertNotContains(response, 'class="btn btn-sm btn-accent js-enter-franchise"')
-
-        with patch(
-            "apps.notifications.views.notify_applicant",
-            return_value=[Notification(
-                channel=Notification.Channel.SMS,
-                delivery_status=Notification.DeliveryStatus.SENT,
-            )],
-        ):
-            response = self.client.post(self.send_message_url, {"message": "Your application is approved."})
-
-        self.assertRedirects(response, self.approved_list_url)
-        self.application.refresh_from_db()
-        self.assertIsNotNone(self.application.franchise_number_unlocked_at)
-
-        response = self.client.get(self.approved_list_url)
-        self.assertNotContains(response, 'class="btn btn-sm btn-outline-secondary js-send-message"')
         self.assertContains(response, 'class="btn btn-sm btn-accent js-enter-franchise"')
+        self.assertNotContains(response, "Send A Message")
+        self.assertNotContains(
+            response, 'class="btn btn-sm btn-outline-primary js-view-summary"'
+        )
 
         response = self.client.post(self.confirm_number_url, {"franchise_number": "TRI-GATE-1001"})
         self.assertRedirects(response, self.approved_list_url)
@@ -957,26 +963,3 @@ class ApprovedApplicationFranchiseNumberGateTests(TestCase):
 
         response = self.client.get(self.approved_list_url)
         self.assertNotContains(response, self.application.reference_code)
-
-    def test_failed_message_delivery_does_not_unlock_franchise_number(self):
-        with patch(
-            "apps.notifications.views.notify_applicant",
-            return_value=[Notification(
-                channel=Notification.Channel.SMS,
-                delivery_status=Notification.DeliveryStatus.FAILED,
-            )],
-        ):
-            self.client.post(self.send_message_url, {"message": "Your application is approved."})
-
-        self.application.refresh_from_db()
-        self.assertIsNone(self.application.franchise_number_unlocked_at)
-
-        response = self.client.get(self.approved_list_url)
-        self.assertContains(response, 'class="btn btn-sm btn-outline-secondary js-send-message"')
-        self.assertNotContains(response, 'class="btn btn-sm btn-accent js-enter-franchise"')
-
-        response = self.client.post(self.confirm_number_url, {"franchise_number": "TRI-GATE-1001"})
-        self.assertRedirects(response, self.approved_list_url)
-        self.application.refresh_from_db()
-        self.assertEqual(self.application.status, Application.Status.APPROVED)
-        self.assertFalse(Franchise.objects.filter(franchise_number="TRI-GATE-1001").exists())

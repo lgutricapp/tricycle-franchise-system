@@ -20,7 +20,7 @@ from .services import transition_application, InvalidTransition, ALLOWED_TRANSIT
 from .services import get_timeline_progress
 from .forms import ApplicantForm, VehicleForm, RenewalLookupForm, RenewalOTPForm, PolicyAcceptanceForm
 from apps.franchises.models import Franchise, FranchiseHolder
-from apps.notifications.message_templates import APPROVED_INSTRUCTIONS_TEMPLATE, submission_message
+from apps.notifications.message_templates import submission_message
 from apps.core.names import normalize_name
 from .services import (
     transition_application, InvalidTransition, ALLOWED_TRANSITIONS,
@@ -697,8 +697,7 @@ def approved_applications_list(request):
         "applications": applications,
         "page_title": "Approved Applications",
         "franchise_retry": franchise_retry,
-        "show_message_button": True,
-        "approved_message_template": APPROVED_INSTRUCTIONS_TEMPLATE,
+        "show_franchise_entry_only": True,
     })
 
 @role_required(User.Role.STAFF, User.Role.REVIEWER)
@@ -732,10 +731,6 @@ def confirm_franchise_number(request, reference_code):
 
     if application.type != Application.ApplicationType.NEW or application.status != Application.Status.APPROVED:
         messages.error(request, "This application is not awaiting a franchise number.")
-        return redirect("staff_applications:approved_list")
-
-    if not application.franchise_number_unlocked_at:
-        messages.error(request, "Send a message successfully to the applicant before entering a franchise number.")
         return redirect("staff_applications:approved_list")
 
     raw_number = request.POST.get("franchise_number", "")
