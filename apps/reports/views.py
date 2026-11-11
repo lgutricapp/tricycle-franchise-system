@@ -9,9 +9,8 @@ from apps.franchises.models import Franchise
 from .services import (
     REPORT_TYPE_NEW_APPLICATIONS,
     REPORT_TYPE_RENEWALS,
-    REPORT_TYPE_STATUS_SUMMARY,
-    REPORT_TYPE_FRANCHISE_REGISTRY,
     REPORT_TYPE_CHOICES,
+    FRANCHISE_REPORT_TYPES,
     validate_report_filters,
     get_report_data,
     export_report_csv,
@@ -83,6 +82,7 @@ def report_index(request):
         "status": status,
         "validation_error": validation_error,
         "report_type_choices": REPORT_TYPE_CHOICES,
+        "franchise_report_types": sorted(FRANCHISE_REPORT_TYPES),
         "application_status_choices": [
             choice for choice in Application.Status.choices
             if choice[0] != Application.Status.DRAFT

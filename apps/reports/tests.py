@@ -12,6 +12,13 @@ from apps.reports.services import (
     REPORT_TYPE_RENEWALS,
     REPORT_TYPE_STATUS_SUMMARY,
     REPORT_TYPE_FRANCHISE_REGISTRY,
+    REPORT_TYPE_TRICYCLE_REGISTRATION,
+    REPORT_TYPE_DRIVER_INFORMATION,
+    REPORT_TYPE_PERMIT_APPLICATIONS,
+    REPORT_TYPE_PERMIT_EXPIRATION,
+    REPORT_TYPE_ACTIVE_UNITS,
+    REPORT_TYPE_PENDING_APPLICATIONS,
+    REPORT_TYPE_EXPIRED_PERMITS,
     get_report_data,
     validate_report_filters,
     export_report_csv,
@@ -50,6 +57,13 @@ class ReportAccessTests(TestCase):
         self.assertContains(response, "Report Generation")
         self.assertContains(response, "Report Filters")
         self.assertNotContains(response, 'value="DRAFT"')
+        self.assertContains(response, "Tricycle Registration Report")
+        self.assertContains(response, "Driver Information Report")
+        self.assertContains(response, "Permit Application Report")
+        self.assertContains(response, "Permit Expiration Report")
+        self.assertContains(response, "Active Unit Report")
+        self.assertContains(response, "Pending Application Report")
+        self.assertContains(response, "Expired Permit Report")
 
     def test_super_admin_can_access(self):
         self.client.login(username="super_admin", password="password123")
@@ -188,6 +202,65 @@ class ReportGenerationTests(TestCase):
         franchise_nums = [r["franchise_number"] for r in data["rows"]]
         self.assertIn("TF-2026-001", franchise_nums)
 
+    def test_tricycle_registration_report_data(self):
+        data = get_report_data(REPORT_TYPE_TRICYCLE_REGISTRATION)
+        self.assertEqual(data["count"], 1)
+        self.assertIn("TR-1001", data["rows"][0]["cells"])
+        self.assertIn("ENG-1001", data["rows"][0]["cells"])
+
+    def test_driver_information_report_data(self):
+        data = get_report_data(REPORT_TYPE_DRIVER_INFORMATION)
+        self.assertEqual(data["count"], 1)
+        self.assertIn("Pedro Penduko", data["rows"][0]["cells"])
+        self.assertIn("09191112222", data["rows"][0]["cells"])
+
+    def test_permit_application_report_includes_all_application_types(self):
+        data = get_report_data(REPORT_TYPE_PERMIT_APPLICATIONS)
+        self.assertEqual(data["count"], 2)
+        references = [row["cells"][0] for row in data["rows"]]
+        self.assertIn(self.app_new.reference_code, references)
+        self.assertIn(self.app_renewal.reference_code, references)
+
+    def test_permit_expiration_and_active_unit_reports(self):
+        expiration_data = get_report_data(REPORT_TYPE_PERMIT_EXPIRATION)
+        active_data = get_report_data(REPORT_TYPE_ACTIVE_UNITS)
+        self.assertIn("TF-2026-001", expiration_data["rows"][0]["cells"])
+        self.assertIn("TF-2026-001", active_data["rows"][0]["cells"])
+
+    def test_pending_application_report_excludes_approved_applications(self):
+        data = get_report_data(REPORT_TYPE_PENDING_APPLICATIONS)
+        references = [row["cells"][0] for row in data["rows"]]
+        self.assertIn(self.app_new.reference_code, references)
+        self.assertNotIn(self.app_renewal.reference_code, references)
+
+    def test_expired_permit_report_only_includes_expired_permits(self):
+        expired_holder = FranchiseHolder.objects.create(
+            first_name="Expired",
+            last_name="Holder",
+            address="Old Street",
+            contact_number="09190000000",
+        )
+        expired_vehicle = Vehicle.objects.create(
+            plate_number="TR-EXPIRED",
+            engine_number="ENG-EXPIRED",
+            chassis_number="CHS-EXPIRED",
+            make="Honda",
+            model="TMX",
+            color="Black",
+        )
+        expired_franchise = Franchise.objects.create(
+            franchise_number="TF-EXPIRED",
+            holder=expired_holder,
+            vehicle=expired_vehicle,
+            status=Franchise.Status.EXPIRED,
+            date_issued=datetime.date(2020, 1, 1),
+            expiration_date=timezone.localdate() - datetime.timedelta(days=1),
+        )
+
+        data = get_report_data(REPORT_TYPE_EXPIRED_PERMITS)
+        permit_numbers = [row["cells"][0] for row in data["rows"]]
+        self.assertEqual(permit_numbers, [expired_franchise.franchise_number])
+
     def test_csv_export(self):
         url = reverse("reports:index")
         response = self.client.get(url, {"report_type": REPORT_TYPE_NEW_APPLICATIONS, "export": "csv"})
@@ -197,6 +270,23 @@ class ReportGenerationTests(TestCase):
         content = response.content.decode("utf-8")
         self.assertIn("Reference #", content)
         self.assertIn(self.app_new.reference_code, content)
+
+    def test_generic_report_csv_and_pdf_exports(self):
+        url = reverse("reports:index")
+        csv_response = self.client.get(
+            url, {"report_type": REPORT_TYPE_PERMIT_APPLICATIONS, "export": "csv"}
+        )
+        self.assertEqual(csv_response.status_code, 200)
+        self.assertIn(
+            self.app_new.reference_code,
+            csv_response.content.decode("utf-8"),
+        )
+
+        pdf_response = self.client.get(
+            url, {"report_type": REPORT_TYPE_DRIVER_INFORMATION, "export": "pdf"}
+        )
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertTrue(pdf_response.content.startswith(b"%PDF-"))
 
     def test_pdf_export(self):
         url = reverse("reports:index")

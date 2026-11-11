@@ -61,7 +61,7 @@
                             <select name="status" id="statusSelect" class="form-select">
                                 <option value="">All Statuses</option>
                                 <!-- Populated dynamically by JS or rendered default -->
-                                {% if report_type == 'franchise_registry' %}
+                                {% if report_type in franchise_report_types %}
                                     {% for val, label in franchise_status_choices %}
                                     <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
                                     {% endfor %}
@@ -216,7 +216,7 @@
                             <td class="px-3 text-muted small">{{ f.contact_number }}</td>
                         </tr>
                         {% endfor %}
-                    {% else %}
+                    {% elif report_data.report_type == 'new_applications' or report_data.report_type == 'renewals' %}
                         {% for app in report_data.rows %}
                         <tr>
                             <td class="ps-4 fw-bold font-monospace text-primary">{{ app.reference_number }}</td>
@@ -231,6 +231,14 @@
                             </td>
                             <td class="px-3 font-monospace">{{ app.plate_number }}</td>
                             <td class="px-3 text-muted small">{{ app.contact_number }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for record in report_data.rows %}
+                        <tr>
+                            {% for cell in record.cells %}
+                            <td class="px-3">{{ cell }}</td>
+                            {% endfor %}
                         </tr>
                         {% endfor %}
                     {% endif %}
@@ -254,6 +262,7 @@
 {% block extra_js %}
 {{ application_status_choices|json_script:"application-status-data" }}
 {{ franchise_status_choices|json_script:"franchise-status-data" }}
+{{ franchise_report_types|json_script:"franchise-report-types" }}
 {{ status|default:''|json_script:"current-status-data" }}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -274,6 +283,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const rawAppChoices = JSON.parse(document.getElementById("application-status-data")?.textContent || "[]");
     const rawFranChoices = JSON.parse(document.getElementById("franchise-status-data")?.textContent || "[]");
+    const franchiseReportTypes = JSON.parse(document.getElementById("franchise-report-types")?.textContent || "[]");
     const currentStatusValue = JSON.parse(document.getElementById("current-status-data")?.textContent || '""');
 
     const applicationStatusOptions = [
@@ -294,7 +304,7 @@ document.addEventListener("DOMContentLoaded", function () {
             statusSelect.innerHTML = '<option value="">All Statuses (Aggregated)</option>';
             statusFilterLabel.classList.add("text-muted");
             statusFilterHelp.classList.remove("d-none");
-        } else if (selectedType === "franchise_registry") {
+        } else if (franchiseReportTypes.includes(selectedType)) {
             statusSelect.disabled = false;
             statusFilterLabel.classList.remove("text-muted");
             statusFilterLabel.textContent = "Franchise Status";

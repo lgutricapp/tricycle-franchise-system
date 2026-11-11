@@ -1,6 +1,7 @@
 import csv
 import io
 from datetime import datetime
+from xml.sax.saxutils import escape
 from django.db.models import Count, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
@@ -8,7 +9,10 @@ from django.utils import timezone
 
 from apps.applications.models import Application
 from apps.franchises.models import Franchise
-from apps.franchises.services import refresh_franchise_statuses
+from apps.franchises.services import (
+    current_franchises_queryset,
+    refresh_franchise_statuses,
+)
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
@@ -28,12 +32,26 @@ REPORT_TYPE_NEW_APPLICATIONS = "new_applications"
 REPORT_TYPE_RENEWALS = "renewals"
 REPORT_TYPE_STATUS_SUMMARY = "status_summary"
 REPORT_TYPE_FRANCHISE_REGISTRY = "franchise_registry"
+REPORT_TYPE_TRICYCLE_REGISTRATION = "tricycle_registration"
+REPORT_TYPE_DRIVER_INFORMATION = "driver_information"
+REPORT_TYPE_PERMIT_APPLICATIONS = "permit_applications"
+REPORT_TYPE_PERMIT_EXPIRATION = "permit_expiration"
+REPORT_TYPE_ACTIVE_UNITS = "active_units"
+REPORT_TYPE_PENDING_APPLICATIONS = "pending_applications"
+REPORT_TYPE_EXPIRED_PERMITS = "expired_permits"
 
 REPORT_TYPE_CHOICES = [
     (REPORT_TYPE_NEW_APPLICATIONS, "New Franchise Applications"),
     (REPORT_TYPE_RENEWALS, "Franchise Renewals"),
     (REPORT_TYPE_STATUS_SUMMARY, "Application Status Summary"),
     (REPORT_TYPE_FRANCHISE_REGISTRY, "Franchise Registry / Active Franchises"),
+    (REPORT_TYPE_TRICYCLE_REGISTRATION, "Tricycle Registration Report"),
+    (REPORT_TYPE_DRIVER_INFORMATION, "Driver Information Report"),
+    (REPORT_TYPE_PERMIT_APPLICATIONS, "Permit Application Report"),
+    (REPORT_TYPE_PERMIT_EXPIRATION, "Permit Expiration Report"),
+    (REPORT_TYPE_ACTIVE_UNITS, "Active Unit Report"),
+    (REPORT_TYPE_PENDING_APPLICATIONS, "Pending Application Report"),
+    (REPORT_TYPE_EXPIRED_PERMITS, "Expired Permit Report"),
 ]
 
 REPORT_TITLES = {
@@ -41,7 +59,31 @@ REPORT_TITLES = {
     REPORT_TYPE_RENEWALS: "Franchise Renewals Report",
     REPORT_TYPE_STATUS_SUMMARY: "Application Status Summary Report",
     REPORT_TYPE_FRANCHISE_REGISTRY: "Franchise Registry Report",
+    REPORT_TYPE_TRICYCLE_REGISTRATION: "Tricycle Registration Report",
+    REPORT_TYPE_DRIVER_INFORMATION: "Driver Information Report",
+    REPORT_TYPE_PERMIT_APPLICATIONS: "Permit Application Report",
+    REPORT_TYPE_PERMIT_EXPIRATION: "Permit Expiration Report",
+    REPORT_TYPE_ACTIVE_UNITS: "Active Unit Report",
+    REPORT_TYPE_PENDING_APPLICATIONS: "Pending Application Report",
+    REPORT_TYPE_EXPIRED_PERMITS: "Expired Permit Report",
 }
+
+FRANCHISE_REPORT_TYPES = {
+    REPORT_TYPE_FRANCHISE_REGISTRY,
+    REPORT_TYPE_TRICYCLE_REGISTRATION,
+    REPORT_TYPE_DRIVER_INFORMATION,
+    REPORT_TYPE_PERMIT_EXPIRATION,
+    REPORT_TYPE_ACTIVE_UNITS,
+    REPORT_TYPE_EXPIRED_PERMITS,
+}
+
+PENDING_APPLICATION_STATUSES = [
+    Application.Status.SUBMITTED,
+    Application.Status.UNDER_REVIEW,
+    Application.Status.REVISION_REQUIRED,
+    Application.Status.RESUBMITTED,
+    Application.Status.FOR_APPROVAL,
+]
 
 
 def parse_date(date_str):
@@ -109,7 +151,210 @@ def get_report_data(report_type, start_date=None, end_date=None, status=""):
     elif report_type == REPORT_TYPE_FRANCHISE_REGISTRY:
         return _get_franchise_registry_report_data(start_date, end_date, status)
 
+    elif report_type == REPORT_TYPE_TRICYCLE_REGISTRATION:
+        return _get_franchise_detail_report_data(
+            report_type, start_date, end_date, status, "registration"
+        )
+
+    elif report_type == REPORT_TYPE_DRIVER_INFORMATION:
+        return _get_franchise_detail_report_data(
+            report_type, start_date, end_date, status, "driver"
+        )
+
+    elif report_type == REPORT_TYPE_PERMIT_APPLICATIONS:
+        return _get_all_application_report_data(start_date, end_date, status)
+
+    elif report_type == REPORT_TYPE_PERMIT_EXPIRATION:
+        return _get_permit_report_data(
+            report_type, start_date, end_date, status, "expiration"
+        )
+
+    elif report_type == REPORT_TYPE_ACTIVE_UNITS:
+        return _get_permit_report_data(
+            report_type, start_date, end_date, status, "active"
+        )
+
+    elif report_type == REPORT_TYPE_PENDING_APPLICATIONS:
+        return _get_all_application_report_data(
+            start_date, end_date, status, pending_only=True
+        )
+
+    elif report_type == REPORT_TYPE_EXPIRED_PERMITS:
+        return _get_permit_report_data(
+            report_type, start_date, end_date, status, "expired"
+        )
+
     raise ValueError(f"Unknown report type: {report_type}")
+
+
+def _report_result(report_type, title, start_date, end_date, status, rows, headers):
+    status_choices = Franchise.Status.choices if report_type in FRANCHISE_REPORT_TYPES else Application.Status.choices
+    return {
+        "report_type": report_type,
+        "title": title,
+        "start_date": start_date,
+        "end_date": end_date,
+        "status": status,
+        "status_display": dict(status_choices).get(status, "All Statuses") if status else "All Statuses",
+        "headers": headers,
+        "rows": rows,
+        "count": len(rows),
+        "is_summary": False,
+    }
+
+
+def _get_all_application_report_data(start_date, end_date, status, pending_only=False):
+    qs = (
+        Application.objects.select_related("applicant", "franchise", "vehicle")
+        .annotate(effective_date=Coalesce("submitted_at", "created_at"))
+    )
+    if pending_only:
+        qs = qs.filter(status__in=PENDING_APPLICATION_STATUSES)
+    if start_date:
+        qs = qs.filter(effective_date__date__gte=start_date)
+    if end_date:
+        qs = qs.filter(effective_date__date__lte=end_date)
+    if status:
+        qs = qs.filter(status=status)
+
+    rows = []
+    for application in qs.order_by("-effective_date"):
+        rows.append({
+            "cells": [
+                application.reference_code,
+                application.applicant.full_name,
+                application.get_type_display(),
+                application.submitted_at.strftime("%Y-%m-%d %H:%M")
+                if application.submitted_at
+                else f"{application.created_at.strftime('%Y-%m-%d')} (Draft)",
+                application.get_status_display(),
+                application.franchise.franchise_number if application.franchise else "—",
+                application.vehicle.plate_number if application.vehicle else "—",
+                application.applicant.contact_number or "—",
+            ],
+        })
+
+    report_type = (
+        REPORT_TYPE_PENDING_APPLICATIONS if pending_only else REPORT_TYPE_PERMIT_APPLICATIONS
+    )
+    return _report_result(
+        report_type,
+        REPORT_TITLES[report_type],
+        start_date,
+        end_date,
+        status,
+        rows,
+        [
+            "Reference #", "Applicant Name", "Application Type", "Submission Date",
+            "Status", "Permit #", "Plate #", "Contact Number",
+        ],
+    )
+
+
+def _franchise_queryset(start_date, end_date, status):
+    refresh_franchise_statuses()
+    qs = Franchise.objects.select_related("holder", "vehicle")
+    if start_date:
+        qs = qs.filter(date_issued__gte=start_date)
+    if end_date:
+        qs = qs.filter(date_issued__lte=end_date)
+    if status:
+        qs = qs.filter(status=status)
+    return qs
+
+
+def _get_franchise_detail_report_data(report_type, start_date, end_date, status, detail):
+    qs = _franchise_queryset(start_date, end_date, status).order_by(
+        "holder__full_name", "franchise_number"
+    )
+    if detail == "registration":
+        headers = [
+            "Permit #", "Registered Driver", "Plate #", "Engine #", "Chassis #",
+            "Make / Model", "Color", "Date Issued", "Expiration Date",
+        ]
+        rows = [{
+            "cells": [
+                franchise.franchise_number,
+                franchise.holder.full_name,
+                franchise.vehicle.plate_number,
+                franchise.vehicle.engine_number,
+                franchise.vehicle.chassis_number,
+                f"{franchise.vehicle.make} {franchise.vehicle.model}".strip(),
+                franchise.vehicle.color,
+                franchise.date_issued.strftime("%Y-%m-%d"),
+                franchise.expiration_date.strftime("%Y-%m-%d"),
+            ],
+        } for franchise in qs]
+    else:
+        headers = [
+            "Driver Name", "Address", "Contact Number", "Email", "Permit #",
+            "Plate #", "Permit Expiration", "Status",
+        ]
+        rows = [{
+            "cells": [
+                franchise.holder.full_name,
+                franchise.holder.address,
+                franchise.holder.contact_number,
+                franchise.holder.email or "—",
+                franchise.franchise_number,
+                franchise.vehicle.plate_number,
+                franchise.expiration_date.strftime("%Y-%m-%d"),
+                franchise.get_status_display(),
+            ],
+        } for franchise in qs]
+    return _report_result(
+        report_type, REPORT_TITLES[report_type], start_date, end_date,
+        status, rows, headers,
+    )
+
+
+def _get_permit_report_data(report_type, start_date, end_date, status, permit_filter):
+    today = timezone.localdate()
+    qs = Franchise.objects.select_related("holder", "vehicle")
+    if permit_filter == "expiration":
+        qs = qs.filter(expiration_date__gte=today).exclude(
+            status=Franchise.Status.REVOKED
+        )
+        if start_date:
+            qs = qs.filter(expiration_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(expiration_date__lte=end_date)
+    elif permit_filter == "active":
+        refresh_franchise_statuses()
+        qs = current_franchises_queryset().select_related("holder", "vehicle")
+        if start_date:
+            qs = qs.filter(date_issued__gte=start_date)
+        if end_date:
+            qs = qs.filter(date_issued__lte=end_date)
+    else:
+        qs = qs.filter(expiration_date__lt=today).exclude(status=Franchise.Status.REVOKED)
+        if start_date:
+            qs = qs.filter(expiration_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(expiration_date__lte=end_date)
+    if status:
+        qs = qs.filter(status=status)
+
+    rows = [{
+        "cells": [
+            franchise.franchise_number,
+            franchise.holder.full_name,
+            franchise.vehicle.plate_number,
+            f"{franchise.vehicle.make} {franchise.vehicle.model}".strip(),
+            franchise.date_issued.strftime("%Y-%m-%d"),
+            franchise.expiration_date.strftime("%Y-%m-%d"),
+            franchise.get_status_display(),
+            franchise.holder.contact_number,
+        ],
+    } for franchise in qs.order_by("expiration_date", "franchise_number")]
+    return _report_result(
+        report_type, REPORT_TITLES[report_type], start_date, end_date,
+        status, rows,
+        [
+            "Permit #", "Driver Name", "Plate #", "Make / Model",
+            "Date Issued", "Expiration Date", "Status", "Contact Number",
+        ],
+    )
 
 
 def _get_application_report_data(app_type, report_type, title, start_date, end_date, status):
@@ -354,6 +599,8 @@ def export_report_csv(report_data):
                 row["status_display"],
                 row["contact_number"],
             ])
+    else:
+        writer.writerows(row["cells"] for row in report_data["rows"])
 
     return response
 
@@ -605,6 +852,13 @@ def export_report_pdf(report_data, generated_by="Administrator"):
                     Paragraph(row["expiration_date"], td_style),
                     Paragraph(row["status_display"], td_style),
                     Paragraph(row["contact_number"], td_style),
+                ])
+        else:
+            col_widths = [720 / len(report_data["headers"])] * len(report_data["headers"])
+            for row in report_data["rows"]:
+                table_data.append([
+                    Paragraph(escape(str(value)), td_style)
+                    for value in row["cells"]
                 ])
 
         results_table = Table(table_data, colWidths=col_widths, repeatRows=1)
